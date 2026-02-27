@@ -20,10 +20,11 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <TodayPage /> },
-{ path: "habits", element: <HabitsPage /> },
-{ path: "tasks", element: <TasksPage /> },
-{ path: "reflections", element: <ReflectionsPage /> },
-{ path: "analytics", element: <AnalyticsPage /> },
+      { path: "today", element: <TodayPage /> }, // ✅ ADD THIS
+      { path: "habits", element: <HabitsPage /> },
+      { path: "tasks", element: <TasksPage /> },
+      { path: "reflections", element: <ReflectionsPage /> },
+      { path: "analytics", element: <AnalyticsPage /> },
     ],
   },
 ]);
