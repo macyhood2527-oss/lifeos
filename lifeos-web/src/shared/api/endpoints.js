@@ -1,5 +1,8 @@
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+
 export const endpoints = {
-  me: "/api/auth/me",
-  logout: "/api/auth/logout",
-  google: "/api/auth/google",
+  me: `${API_BASE}/api/auth/me`,
+  logout: `${API_BASE}/api/auth/logout`,
+  google: `${API_BASE}/api/auth/google`,
 };
