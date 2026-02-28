@@ -44,15 +44,21 @@ export async function subscribe(req: Request, res: Response) {
   const userId = getUserId(req);
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-  const sub = req.body?.subscription ?? req.body;
+ const sub = req.body?.subscription ?? req.body;
 
-  if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
-    return res.status(400).json({
-      message: "Invalid subscription object.",
-      got: sub ? Object.keys(sub) : null,
-    });
-  }
-
+if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
+  return res.status(400).json({
+    error: "Invalid subscription object.",
+    debug: {
+      gotBodyKeys: req.body ? Object.keys(req.body) : null,
+      gotSubKeys: sub ? Object.keys(sub) : null,
+      hasEndpoint: Boolean(sub?.endpoint),
+      hasKeys: Boolean(sub?.keys),
+      hasP256dh: Boolean(sub?.keys?.p256dh),
+      hasAuth: Boolean(sub?.keys?.auth),
+    },
+  });
+}
   await upsertSubscription(userId, sub);
   return res.status(201).json({ ok: true });
 }
