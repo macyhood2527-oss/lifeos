@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Section from "../../shared/ui/Section";
 import { getWeeklyAnalytics } from "./analytics.api";
 
-// ✅ add this (adjust path if yours differs)
+// ✅ adjust if your path differs
 import { listReflections } from "../reflections/reflections.api";
 
 import {
@@ -15,6 +15,7 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  Area,
 } from "recharts";
 
 // Pastel palette (soft, varied)
@@ -43,7 +44,6 @@ function clamp(n, a, b) {
 }
 
 function ymdFromAny(x) {
-  // reflect_date could be "2026-02-28" or "2026-02-28 04:31:19.475"
   return String(x ?? "").slice(0, 10);
 }
 
@@ -53,21 +53,17 @@ function isBetweenInclusive(ymd, start, end) {
 }
 
 function weekdayLabelFromIndex(i) {
-  // Mon..Sun
   return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i] ?? "";
 }
 
-// Tiny insight (gentle): compare early-week vs late-week average
-function buildMoodInsight(points) {
-  const vals = points.map((p) => p.mood).filter((m) => Number.isFinite(m));
+function buildMoodInsight(series) {
+  const vals = series.map((p) => p.mood).filter((m) => Number.isFinite(m));
   if (vals.length === 0) return "No mood logs yet — add one in Reflections when you’re ready.";
   if (vals.length === 1) return "One mood log this week — a tiny start counts.";
 
-  // only consider days that have mood
-  const withMood = points.filter((p) => Number.isFinite(p.mood));
+  const withMood = series.filter((p) => Number.isFinite(p.mood));
   if (withMood.length < 2) return "Not enough mood logs to spot a trend yet.";
 
-  // split into early/late halves by order
   const mids = Math.floor(withMood.length / 2);
   const early = withMood.slice(0, mids).map((p) => p.mood);
   const late = withMood.slice(mids).map((p) => p.mood);
@@ -77,7 +73,6 @@ function buildMoodInsight(points) {
   const a2 = avg(late);
   const diff = a2 - a1;
 
-  // very gentle language
   if (Math.abs(diff) < 0.35) return "Mood stayed fairly steady — gentle consistency.";
   if (diff >= 0.35 && diff < 1.25) return "Mood nudged upward — small wins, gently.";
   if (diff >= 1.25) return "Mood rose noticeably — you’re finding your rhythm.";
@@ -88,9 +83,9 @@ function buildMoodInsight(points) {
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
-  const [weekStart, setWeekStart] = useState(null); // YYYY-MM-DD (Monday)
+  const [weekStart, setWeekStart] = useState(null);
 
-  // 🔥 reflections list (we’ll filter for the week)
+  // reflections list (client-filtered for the week)
   const [allReflections, setAllReflections] = useState([]);
 
   // Micro-interaction state
@@ -102,8 +97,7 @@ export default function AnalyticsPage() {
     setData(res);
     setWeekStart(res?.week?.start ?? nextWeekStart ?? null);
 
-    // ✅ secondary fetch (no backend change needed)
-    // Pull latest reflections and filter by the week range on the client
+    // ✅ secondary fetch (no backend change)
     const list = await listReflections({ limit: 120 }).catch(() => []);
     setAllReflections(Array.isArray(list) ? list : []);
   }
@@ -125,7 +119,6 @@ export default function AnalyticsPage() {
   const habitsPie = useMemo(() => {
     const habits = data?.habits ?? [];
     const total = habits.reduce((acc, h) => acc + Number(h.checkins ?? 0), 0);
-
     return habits.map((h) => ({
       name: h.name,
       value: Number(h.checkins ?? 0),
@@ -141,7 +134,6 @@ export default function AnalyticsPage() {
     return { created, completed, percent };
   }, [data]);
 
-  // 🔔 Trigger a gentle micro-interaction when percent changes
   useEffect(() => {
     const prev = prevPercentRef.current;
     const next = tasksBar.percent;
@@ -165,7 +157,6 @@ export default function AnalyticsPage() {
     const end = data?.week?.end;
     if (!start || !end) return [];
 
-    // map by date => mood
     const map = new Map();
     for (const r of Array.isArray(allReflections) ? allReflections : []) {
       const ymd = ymdFromAny(r.reflect_date);
@@ -175,17 +166,10 @@ export default function AnalyticsPage() {
       if (Number.isFinite(mood)) map.set(ymd, clamp(mood, 1, 10));
     }
 
-    // produce Mon..Sun
     return Array.from({ length: 7 }).map((_, i) => {
       const ymd = addDays(start, i);
       const mood = map.has(ymd) ? map.get(ymd) : null;
-
-      return {
-        day: weekdayLabelFromIndex(i),
-        ymd,
-        // Recharts likes numbers; use null for gaps
-        mood,
-      };
+      return { day: weekdayLabelFromIndex(i), ymd, mood };
     });
   }, [data?.week?.start, data?.week?.end, allReflections]);
 
@@ -193,7 +177,7 @@ export default function AnalyticsPage() {
     const moods = moodSeries.map((d) => d.mood).filter((m) => Number.isFinite(m));
     const count = moods.length;
     const avg = count ? Math.round((moods.reduce((a, b) => a + b, 0) / count) * 10) / 10 : null;
-    const insight = buildMoodInsight(moodSeries.filter((d) => d.mood != null).map((d) => ({ mood: d.mood })));
+    const insight = buildMoodInsight(moodSeries);
     return { count, avg, insight };
   }, [moodSeries]);
 
@@ -274,7 +258,6 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
 
-                {/* Legend */}
                 <div className="space-y-2">
                   {habitsPie.map((h, idx) => (
                     <div key={h.name} className="flex items-center justify-between gap-3">
@@ -300,16 +283,12 @@ export default function AnalyticsPage() {
             <div className="mt-3 grid grid-cols-3 gap-3">
               <div className="rounded-2xl border border-black/5 bg-emerald-50 p-3 transition hover:-translate-y-[1px] hover:shadow-sm">
                 <div className="text-xs text-emerald-800">Created</div>
-                <div className="mt-1 text-lg font-semibold text-emerald-900">
-                  {tasksBar.created}
-                </div>
+                <div className="mt-1 text-lg font-semibold text-emerald-900">{tasksBar.created}</div>
               </div>
 
               <div className="rounded-2xl border border-black/5 bg-sky-50 p-3 transition hover:-translate-y-[1px] hover:shadow-sm">
                 <div className="text-xs text-sky-800">Completed</div>
-                <div className="mt-1 text-lg font-semibold text-sky-900">
-                  {tasksBar.completed}
-                </div>
+                <div className="mt-1 text-lg font-semibold text-sky-900">{tasksBar.completed}</div>
               </div>
 
               <div className="rounded-2xl border border-black/5 bg-rose-50 p-3 transition hover:-translate-y-[1px] hover:shadow-sm">
@@ -323,14 +302,12 @@ export default function AnalyticsPage() {
             <div className="mt-5">
               <div className="flex items-center justify-between text-xs text-stone-600">
                 <span>Completion rate</span>
-
                 <span
                   className={`text-stone-700 font-medium inline-flex items-center gap-1 transition ${
                     pulse ? "scale-[1.06]" : "scale-100"
                   }`}
                 >
-                  {tasksBar.percent}%
-                  {pulse ? <span className="text-[11px]">✨</span> : null}
+                  {tasksBar.percent}% {pulse ? <span className="text-[11px]">✨</span> : null}
                 </span>
               </div>
 
@@ -357,22 +334,19 @@ export default function AnalyticsPage() {
 
         {/* Bottom row */}
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {/* 🌈 Mood Trend Line (replaces reflections weekly boxes) */}
+          {/* 🌈 Mood Trend */}
           <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-stone-900">Mood trend</div>
                 <div className="mt-1 text-xs text-stone-500">
-                  {moodStats.count} logs this week
-                  {" • "}
-                  Avg mood: {moodStats.avg ?? "—"}
+                  {moodStats.count} logs this week • Avg mood: {moodStats.avg ?? "—"}
                 </div>
               </div>
-
               <div className="text-[11px] text-stone-500">Mon → Sun</div>
             </div>
 
-            <div className="mt-3 h-32 rounded-2xl border border-black/5 bg-white/55 p-2">
+            <div className="mt-3 h-36 rounded-2xl border border-black/5 bg-white/55 p-2">
               {moodSeries.every((d) => d.mood == null) ? (
                 <div className="h-full flex items-center justify-center text-sm text-stone-500">
                   No mood logs yet — add one in Reflections 🌿
@@ -380,19 +354,46 @@ export default function AnalyticsPage() {
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={moodSeries} margin={{ top: 6, right: 10, bottom: 0, left: -20 }}>
+                    {/* defs for gradient line + soft fill */}
+                    <defs>
+                      <linearGradient id="moodLine" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#BEE3F8" />
+                        <stop offset="50%" stopColor="#C4B5FD" />
+                        <stop offset="100%" stopColor="#FBCFE8" />
+                      </linearGradient>
+
+                      <linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.28" />
+                        <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.02" />
+                      </linearGradient>
+                    </defs>
+
                     <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
                     <YAxis domain={[1, 10]} hide />
+
                     <Tooltip
                       formatter={(v) => (v == null ? "—" : `${v}/10`)}
                       labelFormatter={(l) => String(l)}
                     />
+
+                    {/* soft fill (Area) behind */}
+                    <Area
+                      type="monotone"
+                      dataKey="mood"
+                      stroke="none"
+                      fill="url(#moodFill)"
+                      isAnimationActive={true}
+                      connectNulls={false}
+                    />
+
+                    {/* gradient line */}
                     <Line
                       type="monotone"
                       dataKey="mood"
                       connectNulls={false}
-                      stroke="#A78BFA"
-                      strokeWidth={2.5}
-                      dot={{ r: 4 }}
+                      stroke="url(#moodLine)"
+                      strokeWidth={3}
+                      dot={{ r: 4, strokeWidth: 2, fill: "#fff" }}
                       activeDot={{ r: 6 }}
                       isAnimationActive={true}
                     />
@@ -406,13 +407,13 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Notifications summary */}
+          {/* Notifications */}
           <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
             <div className="text-sm font-medium text-stone-900">Notifications</div>
             <div className="mt-2 text-xs text-stone-600">
-              Sent: <span className="text-stone-800">{data?.push?.sent ?? 0}</span>{" "}
-              • Failed: <span className="text-stone-800">{data?.push?.failed ?? 0}</span>{" "}
-              • Skipped: <span className="text-stone-800">{data?.push?.skipped ?? 0}</span>
+              Sent: <span className="text-stone-800">{data?.push?.sent ?? 0}</span> • Failed:{" "}
+              <span className="text-stone-800">{data?.push?.failed ?? 0}</span> • Skipped:{" "}
+              <span className="text-stone-800">{data?.push?.skipped ?? 0}</span>
             </div>
           </div>
         </div>
