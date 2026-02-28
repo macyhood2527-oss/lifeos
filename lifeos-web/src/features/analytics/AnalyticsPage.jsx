@@ -390,16 +390,7 @@ export default function AnalyticsPage() {
   </div>
 </div>
 
-  {/* Notifications */}
-  <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
-    <div className="text-sm font-medium text-stone-900">Notifications</div>
-    <div className="mt-2 text-xs text-stone-600">
-      Sent: <span className="text-stone-800">{data?.push?.sent ?? 0}</span> • Failed:{" "}
-      <span className="text-stone-800">{data?.push?.failed ?? 0}</span> • Skipped:{" "}
-      <span className="text-stone-800">{data?.push?.skipped ?? 0}</span>
-    </div>
-  </div>
-</div>
+ 
           
         </Section>
       </GlassPanel>
