@@ -111,9 +111,13 @@ export default function AppShell() {
           <div className="sticky top-0 z-30 mt-3">
             <div className="rounded-3xl border border-black/5 bg-white/55 backdrop-blur shadow-sm">
               <nav className="px-3 py-2">
-                <div className="overflow-x-auto no-scrollbar">
+                <div className="overflow-x-auto no-scrollbar scroll-smooth">
                   {/* this wrapper is the measuring container */}
-                  <div ref={navRef} className="relative flex items-center gap-2 min-w-max">
+                  <div
+  ref={navRef}
+  className="relative flex items-center gap-2 min-w-max"
+  style={{ padding: "4px 0" }}
+>
                     {/* Animated pill indicator */}
                     <div
                       aria-hidden="true"
