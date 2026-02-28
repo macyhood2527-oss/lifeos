@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 
-/**
- * Sparkle
- * - Pass a boolean trigger that flips true when you want sparkles.
- * - It auto-hides after 900ms.
- */
-export default function Sparkle({ trigger }) {
+export default function Sparkles({ trigger }) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
