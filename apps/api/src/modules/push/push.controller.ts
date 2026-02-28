@@ -49,12 +49,11 @@ export async function subscribe(req: Request, res: Response) {
   if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
     return res.status(400).json({
       message: "Invalid subscription object.",
-      expected: { endpoint: "...", keys: { p256dh: "...", auth: "..." } },
+      got: sub ? Object.keys(sub) : null,
     });
   }
 
   await upsertSubscription(userId, sub);
-
   return res.status(201).json({ ok: true });
 }
 
