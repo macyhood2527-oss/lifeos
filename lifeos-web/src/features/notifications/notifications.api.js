@@ -7,6 +7,9 @@ const ROUTES = {
   test: "/api/push/test",
 };
 
+export function getVapidPublicKey() {
+  return apiFetch("/api/push/vapid-public-key");
+}
 export function getPushStatus() {
   return apiFetch(ROUTES.status);
 }
