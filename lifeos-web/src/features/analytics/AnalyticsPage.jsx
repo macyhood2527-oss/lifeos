@@ -260,26 +260,133 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-black/5 bg-white/55 p-4 backdrop-blur-sm transition hover:-translate-y-[1px] hover:shadow-sm">
-              <div className="text-sm font-medium text-stone-900">Reflections</div>
-              <div className="mt-2 text-sm text-stone-800">
-                {data?.reflections?.count ?? 0} entries this week
-              </div>
-              <div className="mt-1 text-xs text-stone-500">
-                Avg mood: {data?.reflections?.avgMood ?? "—"}
-              </div>
-            </div>
+{/* Weekly reflections strip + Notifications */}
+<div className="mt-4 grid gap-4 lg:grid-cols-2">
+  {/* Weekly reflections (7-day mood strip) */}
+  <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <div className="text-sm font-medium text-stone-900">Reflections</div>
+        <div className="mt-1 text-xs text-stone-500">
+          {data?.reflections?.count ?? 0} entries • avg mood: {data?.reflections?.avgMood ?? "—"}
+        </div>
+      </div>
 
-            <div className="rounded-2xl border border-black/5 bg-white/55 p-4 backdrop-blur-sm transition hover:-translate-y-[1px] hover:shadow-sm">
-              <div className="text-sm font-medium text-stone-900">Notifications</div>
-              <div className="mt-2 text-xs text-stone-600">
-                Sent: <span className="text-stone-800">{data?.push?.sent ?? 0}</span> • Failed:{" "}
-                <span className="text-stone-800">{data?.push?.failed ?? 0}</span> • Skipped:{" "}
-                <span className="text-stone-800">{data?.push?.skipped ?? 0}</span>
-              </div>
-            </div>
+      <div className="text-xs text-stone-500">Mon → Sun</div>
+    </div>
+
+    {(() => {
+      // Try to read moods from weekly analytics:
+      // Supports:
+      // 1) data.reflections.byDay = [{ date:"YYYY-MM-DD", mood:7 }, ...]
+      // 2) data.reflections.byDay = { "YYYY-MM-DD": { mood:7 }, ... } OR { "YYYY-MM-DD": 7 }
+      const byDay = data?.reflections?.byDay;
+      const start = data?.week?.start; // YYYY-MM-DD (Monday)
+
+      const getMood = (ymd) => {
+        if (!byDay) return null;
+
+        // array form
+        if (Array.isArray(byDay)) {
+          const hit = byDay.find((x) => String(x?.date ?? x?.ymd ?? "").slice(0, 10) === ymd);
+          const m = hit?.mood ?? hit?.avgMood ?? hit?.value;
+          return m == null ? null : Number(m);
+        }
+
+        // object/map form
+        const v = byDay[ymd];
+        if (v == null) return null;
+        if (typeof v === "number") return Number(v);
+        const m = v?.mood ?? v?.avgMood ?? v?.value;
+        return m == null ? null : Number(m);
+      };
+
+      const moodToPastel = (mood) => {
+        const m = Number(mood);
+        if (!Number.isFinite(m)) return null;
+
+        const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const mix = (c1, c2, t) => ({
+          r: Math.round(lerp(c1.r, c2.r, t)),
+          g: Math.round(lerp(c1.g, c2.g, t)),
+          b: Math.round(lerp(c1.b, c2.b, t)),
+        });
+        const css = (c) => `rgb(${c.r}, ${c.g}, ${c.b})`;
+
+        const MOOD_LOW = { r: 186, g: 224, b: 255 }; // blue
+        const MOOD_MID = { r: 210, g: 190, b: 255 }; // purple
+        const MOOD_HIGH = { r: 255, g: 200, b: 225 }; // pink
+
+        const x = clamp(m, 1, 10);
+        if (x <= 6) {
+          const t = (x - 1) / 5;
+          return css(mix(MOOD_LOW, MOOD_MID, t));
+        }
+        const t = (x - 6) / 4;
+        return css(mix(MOOD_MID, MOOD_HIGH, t));
+      };
+
+      const addDays = (ymd, delta) => {
+        const d = new Date(ymd + "T00:00:00");
+        d.setDate(d.getDate() + delta);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+      };
+
+      // If start isn't available, still render placeholders
+      const base = start || null;
+
+      const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+      return (
+        <>
+          <div className="mt-3 grid grid-cols-7 gap-2">
+            {labels.map((label, i) => {
+              const dayYMD = base ? addDays(base, i) : null;
+              const mood = dayYMD ? getMood(dayYMD) : null;
+              const bg = mood != null ? moodToPastel(mood) : "rgba(255,255,255,0.7)";
+
+              return (
+                <div
+                  key={label}
+                  className="rounded-2xl border border-black/10 px-2 py-2 text-center"
+                  style={{ backgroundColor: bg }}
+                  title={dayYMD ? `${dayYMD} — mood ${mood ?? "—"}` : label}
+                >
+                  <div className="text-[10px] text-stone-700">{label}</div>
+                  <div className={`mt-0.5 text-xs ${mood != null ? "text-stone-900" : "text-stone-500"}`}>
+                    {mood != null ? mood : "—"}
+                  </div>
+                </div>
+              );
+            })}
           </div>
+
+          {!data?.reflections?.byDay ? (
+            <div className="mt-2 text-xs text-stone-500">
+              (Optional) If you want this to reflect real moods, return <span className="font-medium">reflections.byDay</span> from{" "}
+              <span className="font-medium">/api/analytics/weekly</span>.
+            </div>
+          ) : null}
+        </>
+      );
+    })()}
+  </div>
+
+  {/* Notifications */}
+  <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
+    <div className="text-sm font-medium text-stone-900">Notifications</div>
+    <div className="mt-2 text-xs text-stone-600">
+      Sent: <span className="text-stone-800">{data?.push?.sent ?? 0}</span> • Failed:{" "}
+      <span className="text-stone-800">{data?.push?.failed ?? 0}</span> • Skipped:{" "}
+      <span className="text-stone-800">{data?.push?.skipped ?? 0}</span>
+    </div>
+  </div>
+</div>
+          
         </Section>
       </GlassPanel>
     </div>
