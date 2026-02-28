@@ -192,7 +192,7 @@ export default function AppShell() {
           </div>
 
           {/* ===== MAIN ===== */}
-          <main className="mt-5 rounded-3xl border border-black/5 bg-white/70 p-4 md:p-6 shadow-sm backdrop-blur transition-all duration-300 hover:shadow-md hover:-translate-y-[2px]">
+         <main className="mt-6">
             <Outlet />
           </main>
 
