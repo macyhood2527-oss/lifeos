@@ -19,10 +19,14 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function logout() {
+async function logout() {
+  try {
     await apiFetch(endpoints.logout, { method: "POST" });
+  } finally {
+    localStorage.removeItem("lifeos_token");
     setUser(null);
   }
+}
 
   useEffect(() => { refresh(); }, []);
 
