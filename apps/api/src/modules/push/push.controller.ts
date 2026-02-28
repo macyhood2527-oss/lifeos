@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import { env } from "../../config/env";
 import { configureWebPush, getWebPushConfigError, isWebPushConfigured } from "../../config/webpush";
 
 import {
@@ -28,33 +27,23 @@ function getUserId(req: Request) {
 }
 
 export async function status(req: Request, res: Response) {
-  // Don't hard-fail if not configured; frontend needs a stable response.
   configureWebPush();
-
   const userId = getUserId(req);
   const latest = userId ? await getLatestSubscription(userId) : null;
 
   return res.json({
     configured: isWebPushConfigured(),
-    publicKeyPresent: Boolean(env.VAPID_PUBLIC_KEY),
     subscribed: Boolean(latest),
   });
-}
-
-export async function getVapidPublicKey(_req: Request, res: Response) {
-  const blocked = requirePushReady(res);
-  if (blocked) return;
-
-  res.json({ publicKey: env.VAPID_PUBLIC_KEY });
 }
 
 export async function subscribe(req: Request, res: Response) {
   const blocked = requirePushReady(res);
   if (blocked) return;
 
-  // ✅ Accept both shapes:
-  // 1) { subscription: {...} }  (frontend)
-  // 2) {...}                    (raw)
+  const userId = getUserId(req);
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
   const sub = req.body?.subscription ?? req.body;
 
   if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
@@ -64,12 +53,7 @@ export async function subscribe(req: Request, res: Response) {
     });
   }
 
-  const userId = getUserId(req);
-  if (!userId) return res.status(401).json({ message: "Unauthorized" });
-
-  const userAgent = req.get("user-agent") ?? null;
-
-  await upsertSubscription(userId, sub, userAgent);
+  await upsertSubscription(userId, sub);
 
   return res.status(201).json({ ok: true });
 }
@@ -97,10 +81,7 @@ export async function test(req: Request, res: Response) {
 
   const subscription = {
     endpoint: row.endpoint,
-    keys: {
-      p256dh: row.p256dh,
-      auth: row.auth,
-    },
+    keys: { p256dh: row.p256dh, auth: row.auth },
   };
 
   try {
