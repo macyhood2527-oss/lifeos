@@ -6,7 +6,12 @@ import {
   subscribePush,
   unsubscribePush,
 } from "../../shared/push/pushClient";
-import { deletePushSubscription, getPushStatus, savePushSubscription } from "./notifications.api";
+import {
+  deletePushSubscription,
+  getPushStatus,
+  savePushSubscription,
+  sendTestPush, // optional; if you don't have this, remove its usage below
+} from "./notifications.api";
 
 function formatQuietHours(user) {
   const s = user?.quiet_hours_start;
@@ -15,18 +20,38 @@ function formatQuietHours(user) {
   return `Quiet hours: ${s}–${e} (${user?.timezone || "timezone unknown"})`;
 }
 
+function prettyError(e) {
+  const status = e?.status;
+  const serverMsg = e?.data?.message;
+
+  if (status === 401) return "You’re not logged in. Please log in again.";
+  if (status === 403) return "Not allowed.";
+  if (status === 404) return "Push endpoints aren’t enabled on the server yet.";
+  if (status === 400) return serverMsg || "Server rejected subscription (check VAPID + payload).";
+  if (status >= 500) return "Server error while handling notifications.";
+  return serverMsg || e?.message || "Something went wrong.";
+}
+
 export default function NotificationsCard() {
   const { user } = useAuth();
 
   const vapidKey = useMemo(() => import.meta.env.VITE_VAPID_PUBLIC_KEY, []);
   const [supported, setSupported] = useState(true);
-  const [permission, setPermission] = useState(() => (typeof Notification !== "undefined" ? Notification.permission : "default"));
+  const [permission, setPermission] = useState(() =>
+    typeof Notification !== "undefined" ? Notification.permission : "default"
+  );
+
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [msg, setMsg] = useState("");
 
+  const [serverConfigured, setServerConfigured] = useState(null); // true/false/null unknown
+  const [serverSubscribed, setServerSubscribed] = useState(false);
+
   async function refreshState() {
     setMsg("");
+
+    // Browser capability check
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       setSupported(false);
       setEnabled(false);
@@ -34,19 +59,39 @@ export default function NotificationsCard() {
     }
 
     setSupported(true);
-    setPermission(Notification.permission);
+    setPermission(typeof Notification !== "undefined" ? Notification.permission : "default");
+
+    // If missing VAPID key, we can’t subscribe from the browser
+    if (!vapidKey) {
+      setEnabled(false);
+      setServerConfigured(false);
+      setServerSubscribed(false);
+      setMsg("Missing VAPID key. Add VITE_VAPID_PUBLIC_KEY in Vercel env and redeploy.");
+      return;
+    }
 
     // Ensure SW is ready
     await registerServiceWorker();
 
     const browserSub = await getExistingSubscription();
-    const server = await getPushStatus().catch(() => null);
+
+    // Ask server status (404 -> not implemented; treat as unknown)
+    const server = await getPushStatus().catch((e) => {
+      if (e?.status === 404) return null;
+      return null;
+    });
+
+    if (server && typeof server === "object") {
+      if (typeof server.configured === "boolean") setServerConfigured(server.configured);
+      if (typeof server.subscribed === "boolean") setServerSubscribed(server.subscribed);
+      if (typeof server.enabled === "boolean") setServerSubscribed(server.enabled);
+    } else {
+      setServerConfigured(null);
+      setServerSubscribed(false);
+    }
 
     // Prefer “browser truth” if subscription exists
-    const isEnabled =
-      !!browserSub ||
-      !!(server && (server.enabled === true || server.subscribed === true));
-
+    const isEnabled = !!browserSub || !!(server && (server.subscribed === true || server.enabled === true));
     setEnabled(isEnabled);
   }
 
@@ -57,7 +102,7 @@ export default function NotificationsCard() {
 
   async function handleEnable() {
     if (!vapidKey) {
-      setMsg("Missing VAPID key. Add VITE_VAPID_PUBLIC_KEY to your .env and restart Vite.");
+      setMsg("Missing VAPID key. Add VITE_VAPID_PUBLIC_KEY in Vercel env and redeploy.");
       return;
     }
 
@@ -67,14 +112,17 @@ export default function NotificationsCard() {
 
       await registerServiceWorker();
 
+      // This returns a PushSubscription JSON (endpoint + keys)
       const subJson = await subscribePush({ vapidPublicKey: vapidKey });
-      await savePushSubscription(subJson);
+
+      // Save to server. Backend should accept either raw sub OR { subscription: sub }
+      await savePushSubscription({ subscription: subJson });
 
       setMsg("Notifications enabled. We’ll keep it gentle.");
       await refreshState();
     } catch (e) {
       console.error(e);
-      setMsg(e?.message || "Could not enable notifications.");
+      setMsg(prettyError(e));
     } finally {
       setBusy(false);
     }
@@ -88,7 +136,7 @@ export default function NotificationsCard() {
       const browserSub = await getExistingSubscription();
       const endpoint = browserSub?.endpoint;
 
-      // Tell backend first (so it stops scheduling/sending)
+      // Tell backend first
       if (endpoint) {
         await deletePushSubscription(endpoint);
       }
@@ -100,11 +148,41 @@ export default function NotificationsCard() {
       await refreshState();
     } catch (e) {
       console.error(e);
-      setMsg(e?.message || "Could not disable notifications.");
+      setMsg(prettyError(e));
     } finally {
       setBusy(false);
     }
   }
+
+  async function handleTest() {
+    try {
+      setBusy(true);
+      setMsg("");
+      if (!serverConfigured) {
+        setMsg("Server push isn’t configured yet (missing VAPID keys on backend).");
+        return;
+      }
+      await sendTestPush?.(); // optional
+      setMsg("Test notification requested. Check your device/browser.");
+    } catch (e) {
+      console.error(e);
+      setMsg(prettyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const statusLabel = !supported
+    ? "Unsupported"
+    : enabled
+      ? "Enabled"
+      : "Disabled";
+
+  const statusClass = !supported
+    ? "bg-stone-50 text-stone-700 border-black/10"
+    : enabled
+      ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+      : "bg-stone-50 text-stone-700 border-black/10";
 
   return (
     <div className="rounded-3xl border border-black/5 bg-white/70 p-4 md:p-6 shadow-sm backdrop-blur">
@@ -115,16 +193,26 @@ export default function NotificationsCard() {
             Gentle reminders — respectful of your timezone and quiet hours.
           </div>
           <div className="mt-2 text-xs text-stone-500">{formatQuietHours(user)}</div>
+
+          <div className="mt-2 text-xs text-stone-500">
+            Server:{" "}
+            <span className="font-medium text-stone-700">
+              {serverConfigured === null ? "unknown" : serverConfigured ? "configured" : "not configured"}
+            </span>
+            {serverConfigured ? (
+              <>
+                {" "}
+                • Subscription:{" "}
+                <span className="font-medium text-stone-700">
+                  {serverSubscribed ? "saved" : "not saved"}
+                </span>
+              </>
+            ) : null}
+          </div>
         </div>
 
-        <span
-          className={`text-xs rounded-xl px-2 py-1 border ${
-            enabled
-              ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-              : "bg-stone-50 text-stone-700 border-black/10"
-          }`}
-        >
-          {enabled ? "Enabled" : "Disabled"}
+        <span className={`text-xs rounded-xl px-2 py-1 border ${statusClass}`}>
+          {statusLabel}
         </span>
       </div>
 
@@ -136,10 +224,11 @@ export default function NotificationsCard() {
         ) : (
           <>
             <div className="text-xs text-stone-500">
-              Browser permission: <span className="font-medium text-stone-700">{permission}</span>
+              Browser permission:{" "}
+              <span className="font-medium text-stone-700">{permission}</span>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {!enabled ? (
                 <button
                   onClick={handleEnable}
@@ -165,12 +254,23 @@ export default function NotificationsCard() {
               >
                 Refresh
               </button>
+
+              <button
+                onClick={handleTest}
+                disabled={busy || !enabled}
+                className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm hover:bg-white/80 disabled:opacity-60"
+                title={!enabled ? "Enable notifications first" : "Send a test notification"}
+              >
+                Test
+              </button>
             </div>
           </>
         )}
 
         {msg ? (
-          <div className="rounded-2xl bg-stone-100 p-3 text-sm text-stone-700">{msg}</div>
+          <div className="rounded-2xl bg-stone-100 p-3 text-sm text-stone-700">
+            {msg}
+          </div>
         ) : null}
       </div>
     </div>
