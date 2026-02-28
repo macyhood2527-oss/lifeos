@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import Section from "../../shared/ui/Section";
 import HabitList from "./components/HabitList";
 import { listHabits, createHabit, updateHabit, deleteHabit } from "./habits.api";
-// If you already created Sparkle.jsx earlier, you can uncomment this and use it later.
- import Sparkle from "../../shared/ui/Sparkle";
 
 function GlassPanel({ children }) {
   return (
@@ -130,7 +128,7 @@ export default function HabitsPage() {
       });
       await load();
       cancelEdit();
-      showToast("Changes saved ✨", "ok");
+      showToast("Changes saved", "ok");
     } catch (e) {
       showToast("Save failed. Please retry.", "warn");
     } finally {
@@ -149,7 +147,7 @@ export default function HabitsPage() {
           setBusyId(habitId);
           await deleteHabit(habitId); // backend soft-disables (active=0)
           await load();
-          showToast("Habit disabled 🧺", "ok");
+          showToast("Habit disabled", "ok");
         } catch (e) {
           showToast("Disable failed. Try again.", "warn");
         } finally {
@@ -186,7 +184,6 @@ export default function HabitsPage() {
         <div
           className={[
             "fixed inset-0 z-50 grid place-items-center p-4",
-            // Subtle vignette: lighter center, darker edges (not edgy black)
             "bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.0)_0%,rgba(16,16,16,0.08)_55%,rgba(16,16,16,0.12)_100%)]",
           ].join(" ")}
         >
@@ -206,12 +203,7 @@ export default function HabitsPage() {
               <button
                 type="button"
                 onClick={confirm.onYes}
-                className={[
-                  "rounded-xl border px-3 py-2 text-xs font-medium transition active:scale-[0.98]",
-                  confirm.tone === "danger"
-                    ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
-                    : "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
-                ].join(" ")}
+                className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800 hover:bg-rose-100 active:scale-[0.98]"
               >
                 {confirm.confirmText ?? "Confirm"}
               </button>
@@ -291,7 +283,9 @@ export default function HabitsPage() {
                   key={h.id}
                   className={[
                     "rounded-2xl border p-3 transition-transform duration-150 ease-out hover:-translate-y-[1px]",
-                    isInactive ? "border-black/5 bg-stone-50/60 opacity-75" : "border-black/5 bg-white/70",
+                    isInactive
+                      ? "border-black/5 bg-stone-50/60 opacity-75"
+                      : "border-black/5 bg-white/70",
                   ].join(" ")}
                 >
                   {!isEditing ? (
@@ -299,7 +293,8 @@ export default function HabitsPage() {
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-stone-900 truncate">{h.name}</div>
                         <div className="mt-1 text-xs text-stone-500">
-                          {h.cadence} • target {h.target_per_period} per period {isInactive ? "• inactive" : ""}
+                          {h.cadence} • target {h.target_per_period} per period{" "}
+                          {isInactive ? "• inactive" : ""}
                         </div>
                       </div>
 
