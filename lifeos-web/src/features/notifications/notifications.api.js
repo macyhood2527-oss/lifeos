@@ -12,7 +12,7 @@ export function getPushStatus() {
 }
 
 export function savePushSubscription(subscriptionJson) {
-  return apiFetch(ROUTES.subscribe, {
+  return apiFetch("/api/push/subscribe", {
     method: "POST",
     body: JSON.stringify({ subscription: subscriptionJson }),
   });
