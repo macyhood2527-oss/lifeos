@@ -1,13 +1,14 @@
 // lifeos-web/src/features/tasks/components/TaskList.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { updateTask, deleteTask } from "../tasks.api";
+import Sparkle from "../../../shared/ui/Sparkle"; // adjust if your folders differ
 
 export default function TaskList({ tasks, onUpdated }) {
   const [busyId, setBusyId] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [draftById, setDraftById] = useState({});
 
-  // --- Toast (tiny feedback) ---
+  // Toast
   const [toast, setToast] = useState(null); // { message, tone }
   useEffect(() => {
     if (!toast) return;
@@ -19,9 +20,11 @@ export default function TaskList({ tasks, onUpdated }) {
     setToast({ message, tone });
   }
 
-  // --- Custom Confirm Modal ---
+  // Sparkles (per task card)
+  const [sparkleId, setSparkleId] = useState(null);
+
+  // Confirm modal
   const [confirm, setConfirm] = useState(null);
-  // confirm: { title, body, confirmText, tone, onYes }
   function askConfirm(payload) {
     setConfirm(payload);
   }
@@ -54,6 +57,10 @@ export default function TaskList({ tasks, onUpdated }) {
       setBusyId(taskId);
       await updateTask(taskId, { status });
       await onUpdated?.(taskId);
+
+      setSparkleId(taskId);
+      setTimeout(() => setSparkleId(null), 950);
+
       showToast(status === "done" ? "Marked done ✨" : "Back to todo 🌿", "ok");
     } catch (e) {
       showToast("Couldn’t update. Try again.", "warn");
@@ -73,6 +80,10 @@ export default function TaskList({ tasks, onUpdated }) {
       });
 
       await onUpdated?.(taskId);
+
+      setSparkleId(taskId);
+      setTimeout(() => setSparkleId(null), 950);
+
       showToast("Details saved ✨", "ok");
     } catch (e) {
       showToast("Save failed. Please retry.", "warn");
@@ -92,6 +103,7 @@ export default function TaskList({ tasks, onUpdated }) {
           setBusyId(taskId);
           await deleteTask(taskId);
           await onUpdated?.(taskId);
+
           showToast("Deleted 🧺", "ok");
         } catch (e) {
           showToast("Delete failed. Try again.", "warn");
@@ -122,9 +134,14 @@ export default function TaskList({ tasks, onUpdated }) {
         </div>
       ) : null}
 
-      {/* Confirm Modal */}
+      {/* Confirm Modal (soft radial gradient backdrop) */}
       {confirm ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
+        <div
+          className={[
+            "fixed inset-0 z-50 grid place-items-center p-4",
+            "bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.0)_0%,rgba(16,16,16,0.08)_55%,rgba(16,16,16,0.12)_100%)]",
+          ].join(" ")}
+        >
           <div className="w-full max-w-sm rounded-3xl border border-black/10 bg-white/85 p-4 shadow-lg backdrop-blur">
             <div className="text-sm font-semibold text-stone-900">{confirm.title}</div>
             <div className="mt-1 text-xs text-stone-600">{confirm.body}</div>
@@ -133,7 +150,7 @@ export default function TaskList({ tasks, onUpdated }) {
               <button
                 type="button"
                 onClick={closeConfirm}
-                className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50"
+                className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 active:scale-[0.98]"
               >
                 Cancel
               </button>
@@ -142,7 +159,7 @@ export default function TaskList({ tasks, onUpdated }) {
                 type="button"
                 onClick={confirm.onYes}
                 className={[
-                  "rounded-xl border px-3 py-2 text-xs font-medium transition",
+                  "rounded-xl border px-3 py-2 text-xs font-medium transition active:scale-[0.98]",
                   confirm.tone === "danger"
                     ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
                     : "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
@@ -168,12 +185,15 @@ export default function TaskList({ tasks, onUpdated }) {
             <div
               key={t.id}
               className={[
-                "w-full rounded-2xl border border-black/5 bg-white/70 p-3",
+                "relative w-full rounded-2xl border border-black/5 bg-white/70 p-3",
                 "transition-transform duration-150 ease-out",
                 "hover:-translate-y-[1px]",
                 isBusy ? "opacity-90" : "",
               ].join(" ")}
             >
+              {/* Sparkles (only for this task when saved/done) */}
+              <Sparkle trigger={sparkleId === t.id} />
+
               {/* Header */}
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -244,7 +264,9 @@ export default function TaskList({ tasks, onUpdated }) {
               <div
                 className={[
                   "overflow-hidden transition-[max-height,opacity,transform] duration-200 ease-out",
-                  isOpen ? "max-h-[520px] opacity-100 translate-y-0" : "max-h-0 opacity-0 -translate-y-1",
+                  isOpen
+                    ? "max-h-[520px] opacity-100 translate-y-0"
+                    : "max-h-0 opacity-0 -translate-y-1",
                 ].join(" ")}
                 aria-hidden={!isOpen}
               >
