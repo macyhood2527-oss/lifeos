@@ -1,23 +1,81 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../shared/auth/useAuth";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import bgTile from "../../assets/bg-tile.jpg";
 
 const linkBase =
-  "shrink-0 rounded-2xl px-3 py-2 text-sm transition-all duration-200 ease-out hover:-translate-y-[1px] hover:shadow-sm border border-transparent whitespace-nowrap";
+  "relative shrink-0 rounded-2xl px-3 py-2 text-sm transition-all duration-200 ease-out whitespace-nowrap " +
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 " +
+  "active:scale-[0.98]";
 
-const link = ({ isActive }) =>
-  `${linkBase} ${
+function linkClass({ isActive }) {
+  return `${linkBase} ${
     isActive
-      ? "bg-white/80 border-black/10 text-stone-900 shadow-sm"
-      : "bg-white/40 text-stone-700 hover:bg-white/70 hover:border-black/5"
+      ? "text-stone-900"
+      : "text-stone-700 hover:text-stone-900"
   }`;
+}
 
 export default function AppShell() {
   const { user, logout } = useAuth();
+  const location = useLocation();
 
   const greeting = user?.name
     ? `Hi, ${user.name} 🌷 small wins, gently.`
     : "Hi 🌷 small wins, gently.";
+
+  // --- animated indicator state ---
+  const navRef = useRef(null);
+  const itemRefs = useRef(new Map()); // key -> element
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+
+  // map routes -> keys used for refs (consistent)
+  const tabs = [
+    { key: "today", label: "Today", to: "/" , end: true },
+    { key: "habits", label: "Habits", to: "/habits" },
+    { key: "tasks", label: "Tasks", to: "/tasks" },
+    { key: "reflections", label: "Reflections", to: "/reflections" },
+    { key: "analytics", label: "Analytics", to: "/analytics" },
+  ];
+
+  function activeKeyFromPath(pathname) {
+    if (pathname === "/") return "today";
+    if (pathname.startsWith("/habits")) return "habits";
+    if (pathname.startsWith("/tasks")) return "tasks";
+    if (pathname.startsWith("/reflections")) return "reflections";
+    if (pathname.startsWith("/analytics")) return "analytics";
+    return "today";
+  }
+
+  function measure() {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const activeKey = activeKeyFromPath(location.pathname);
+    const el = itemRefs.current.get(activeKey);
+    if (!el) return;
+
+    const navRect = nav.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+
+    setIndicator({
+      left: elRect.left - navRect.left,
+      width: elRect.width,
+      ready: true,
+    });
+  }
+
+  useLayoutEffect(() => {
+    measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
@@ -37,13 +95,12 @@ export default function AppShell() {
             <header className="flex items-center justify-between px-4 py-4">
               <div className="min-w-0">
                 <div className="text-lg font-semibold text-stone-900">🍃 LifeOS</div>
-                {/* Collapsed greeting (single line) */}
                 <div className="text-xs text-stone-600 truncate">{greeting}</div>
               </div>
 
               <button
                 onClick={logout}
-                className="shrink-0 rounded-2xl border border-black/10 bg-white/80 px-3 py-2 text-sm transition hover:bg-white"
+                className="shrink-0 rounded-2xl border border-black/10 bg-white/80 px-3 py-2 text-sm transition hover:bg-white active:scale-[0.98]"
               >
                 Logout
               </button>
@@ -55,22 +112,44 @@ export default function AppShell() {
             <div className="rounded-3xl border border-black/5 bg-white/55 backdrop-blur shadow-sm">
               <nav className="px-3 py-2">
                 <div className="overflow-x-auto no-scrollbar">
-                  <div className="flex items-center gap-2 min-w-max">
-                    <NavLink to="/" end className={link}>
-                      Today
-                    </NavLink>
-                    <NavLink to="/habits" className={link}>
-                      Habits
-                    </NavLink>
-                    <NavLink to="/tasks" className={link}>
-                      Tasks
-                    </NavLink>
-                    <NavLink to="/reflections" className={link}>
-                      Reflections
-                    </NavLink>
-                    <NavLink to="/analytics" className={link}>
-                      Analytics
-                    </NavLink>
+                  {/* this wrapper is the measuring container */}
+                  <div ref={navRef} className="relative flex items-center gap-2 min-w-max">
+                    {/* Animated pill indicator */}
+                    <div
+                      aria-hidden="true"
+                      className="absolute top-1/2 -translate-y-1/2 rounded-2xl border border-black/10 bg-white/80 shadow-sm transition-[transform,width] duration-300 ease-out"
+                      style={{
+                        transform: `translateX(${indicator.left}px) translateY(-50%)`,
+                        width: indicator.width,
+                        height: 36,
+                        opacity: indicator.ready ? 1 : 0,
+                      }}
+                    />
+
+                    {tabs.map((t) => (
+                      <NavLink
+                        key={t.key}
+                        to={t.to}
+                        end={t.end}
+                        className={linkClass}
+                        // store refs to compute indicator position
+                        ref={(node) => {
+                          if (!node) {
+                            itemRefs.current.delete(t.key);
+                          } else {
+                            itemRefs.current.set(t.key, node);
+                          }
+                        }}
+                      >
+                        {/* text stays above the pill */}
+                        <span className="relative z-10">{t.label}</span>
+
+                        {/* subtle active accent line (earthy pastel) */}
+                        <span
+                          className="pointer-events-none absolute left-3 right-3 -bottom-[6px] h-[3px] rounded-full bg-emerald-200/70 opacity-0 transition-opacity duration-200"
+                        />
+                      </NavLink>
+                    ))}
                   </div>
                 </div>
               </nav>
@@ -82,15 +161,11 @@ export default function AppShell() {
           </main>
 
           <footer className="mt-6 text-center text-xs text-stone-500">
-  <div className="rounded-3xl border border-black/5 bg-white/40 px-4 py-4 backdrop-blur">
-    <div>
-      ✨ Built gently by Melissa Marcelo || 🌸.
-    </div>
-    <div className="mt-1">
-      LifeOS — calm progress over pressure.
-    </div>
-  </div>
-</footer>
+            <div className="rounded-3xl border border-black/5 bg-white/40 px-4 py-4 backdrop-blur">
+              <div>✨ Built gently by Melissa Marcelo || 🌸.</div>
+              <div className="mt-1">LifeOS — calm progress over pressure.</div>
+            </div>
+          </footer>
         </div>
       </div>
     </div>
