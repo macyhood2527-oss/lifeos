@@ -21,7 +21,7 @@ import { todayRouter } from "./modules/today/today.routes";
 import { habitsRouter } from "./modules/habits/habits.routes";
 import { reflectionsRouter } from "./modules/reflections/reflections.routes";
 import { analyticsRouter } from "./modules/analytics/analytics.routes";
-import { pushRouter } from "./modules/push/push.routes";
+
 import { remindersRouter } from "./modules/reminders/reminders.routes";
 import pushRoutes from "./modules/push/push.routes";
 
@@ -61,7 +61,7 @@ export function createApp() {
   app.use("/api/reflections", reflectionsRouter);
 app.use("/api/push", pushRoutes);
   app.use("/api/analytics", analyticsRouter);
-  app.use("/api/push", pushRouter);
+
   app.use("/api/reminders", remindersRouter);
 
   // Errors last
