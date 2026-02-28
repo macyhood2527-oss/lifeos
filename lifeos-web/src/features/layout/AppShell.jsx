@@ -111,7 +111,7 @@ export default function AppShell() {
           <div className="sticky top-0 z-30 mt-3">
             <div className="rounded-3xl border border-black/5 bg-white/55 backdrop-blur shadow-sm">
               <nav className="px-3 py-2">
-                <div className="overflow-x-auto no-scrollbar scroll-smooth">
+                <div className="overflow-x-auto no-scrollbar">
                   {/* this wrapper is the measuring container */}
                   <div
   ref={navRef}
