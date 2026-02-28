@@ -43,3 +43,25 @@
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes lifeos-sparkle {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(0px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.9);
+  }
+}
+
+.lifeos-sparkle {
+  position: absolute;
+  pointer-events: none;
+  animation: lifeos-sparkle 900ms ease-out forwards;
+  font-size: 12px;
+}
