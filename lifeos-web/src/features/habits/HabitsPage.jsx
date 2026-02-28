@@ -3,7 +3,7 @@ import Section from "../../shared/ui/Section";
 import HabitList from "./components/HabitList";
 import { listHabits, createHabit, updateHabit, deleteHabit } from "./habits.api";
 // If you already created Sparkle.jsx earlier, you can uncomment this and use it later.
-// import Sparkle from "../../shared/ui/Sparkle";
+ import Sparkle from "../../shared/ui/Sparkle";
 
 function GlassPanel({ children }) {
   return (
