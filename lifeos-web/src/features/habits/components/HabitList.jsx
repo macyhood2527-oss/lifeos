@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { checkinHabit } from "../habits.api";
-import Sparkle from "../../../shared/ui/Sparkle"; // adjust if your folders differ
 
 function getTarget(h) {
   return Number(h?.target_per_period ?? h?.target ?? 1) || 1;
@@ -44,9 +43,6 @@ export default function HabitList({ habits, onCheckedIn }) {
     setToast({ message, tone });
   }
 
-  // Sparkles (per habit card)
-  const [sparkleId, setSparkleId] = useState(null);
-
   const normalized = useMemo(() => {
     const list = Array.isArray(habits) ? habits : [];
     return list.map((h) => {
@@ -72,11 +68,7 @@ export default function HabitList({ habits, onCheckedIn }) {
       setBusyId(habitId);
       await checkinHabit(habitId);
       await onCheckedIn?.(habitId);
-
-      // feedback
-      setSparkleId(habitId);
-      setTimeout(() => setSparkleId(null), 950);
-      showToast("Check-in saved ✨", "ok");
+      showToast("Check-in saved", "ok");
     } catch (e) {
       showToast("Couldn’t check-in. Try again.", "warn");
     } finally {
@@ -126,9 +118,6 @@ export default function HabitList({ habits, onCheckedIn }) {
                   : "border-black/5 bg-white/70",
               ].join(" ")}
             >
-              {/* Sparkles (only when this habit was checked-in) */}
-              <Sparkle trigger={sparkleId === h.id} />
-
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <div
