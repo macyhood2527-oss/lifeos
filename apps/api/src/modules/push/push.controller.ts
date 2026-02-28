@@ -59,7 +59,7 @@ if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
     },
   });
 }
-  await upsertSubscription(userId, sub);
+ await upsertSubscription(userId, sub, userAgent);
   return res.status(201).json({ ok: true });
 }
 
