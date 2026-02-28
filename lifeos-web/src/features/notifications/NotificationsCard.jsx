@@ -116,7 +116,7 @@ export default function NotificationsCard() {
       const subJson = await subscribePush({ vapidPublicKey: vapidKey });
 
       // Save to server. Backend should accept either raw sub OR { subscription: sub }
-      await savePushSubscription({ subscription: subJson });
+      await savePushSubscription(subJson);
 
       setMsg("Notifications enabled. We’ll keep it gentle.");
       await refreshState();
