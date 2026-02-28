@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Section from "../../shared/ui/Section";
 import HabitList from "../habits/components/HabitList";
 import TaskComposer from "../tasks/components/TaskComposer";
 import TaskList from "../tasks/components/TaskList";
@@ -13,18 +12,31 @@ import {
   getTodayReflection,
 } from "./today.api";
 
-function Divider() {
+function GlassPanel({ title, subtitle, children, rightSlot }) {
   return (
-    <div className="py-2">
-      <div className="h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
-    </div>
+    <section className="rounded-3xl border border-black/5 bg-white/55 shadow-sm backdrop-blur-md">
+      <div className="px-5 pt-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-stone-900">{title}</h2>
+            {subtitle ? (
+              <p className="mt-1 text-sm text-stone-600">{subtitle}</p>
+            ) : null}
+          </div>
+          {rightSlot ? <div className="shrink-0">{rightSlot}</div> : null}
+        </div>
+
+        <div className="mt-4 h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+      </div>
+
+      <div className="p-5">{children}</div>
+    </section>
   );
 }
 
 export default function TodayPage() {
   const [loading, setLoading] = useState(true);
 
-  // Keep error messages specific per section so one failure doesn't blank the page
   const [summaryError, setSummaryError] = useState(null);
   const [habitsError, setHabitsError] = useState(null);
   const [tasksError, setTasksError] = useState(null);
@@ -35,7 +47,6 @@ export default function TodayPage() {
   const [reflection, setReflection] = useState(null);
   const [weekly, setWeekly] = useState(null);
 
-  // 🔁 Central reload function (won't fail whole page if one endpoint fails)
   const reload = useCallback(async () => {
     setSummaryError(null);
     setHabitsError(null);
@@ -43,67 +54,54 @@ export default function TodayPage() {
     setReflectionError(null);
 
     const results = await Promise.allSettled([
-      getTodayTasks(),        // 0
-      getHabits(),            // 1
-      getTodayReflection(),   // 2
-      getWeeklyAnalytics(),   // 3
+      getTodayTasks(),
+      getHabits(),
+      getTodayReflection(),
+      getWeeklyAnalytics(),
     ]);
 
-    // --- tasks ---
-    if (results[0].status === "fulfilled") {
-      setTasks(results[0].value ?? []);
-    } else {
+    if (results[0].status === "fulfilled") setTasks(results[0].value ?? []);
+    else {
       console.error("getTodayTasks failed:", results[0].reason);
       setTasks([]);
       setTasksError("Tasks couldn't load right now.");
     }
 
-    // --- habits ---
-    if (results[1].status === "fulfilled") {
-      setHabits(results[1].value ?? []);
-    } else {
+    if (results[1].status === "fulfilled") setHabits(results[1].value ?? []);
+    else {
       console.error("getHabits failed:", results[1].reason);
       setHabits([]);
       setHabitsError("Habits couldn't load right now.");
     }
 
-    // --- reflection ---
-    if (results[2].status === "fulfilled") {
-      setReflection(results[2].value ?? null);
-    } else {
+    if (results[2].status === "fulfilled") setReflection(results[2].value ?? null);
+    else {
       console.error("getTodayReflection failed:", results[2].reason);
       setReflection(null);
       setReflectionError("Reflection couldn't load right now.");
     }
 
-    // --- weekly analytics / recap ---
-    if (results[3].status === "fulfilled") {
-      setWeekly(results[3].value ?? null);
-    } else {
+    if (results[3].status === "fulfilled") setWeekly(results[3].value ?? null);
+    else {
       console.error("getWeeklyAnalytics failed:", results[3].reason);
       setWeekly(null);
       setSummaryError("Summary couldn't load right now.");
     }
   }, []);
 
-  // 🚀 Initial load
   useEffect(() => {
     let alive = true;
-
     (async () => {
       await reload();
       if (alive) setLoading(false);
     })();
-
     return () => {
       alive = false;
     };
   }, [reload]);
 
-  // 🎯 Top 5 prioritized tasks for Today page
   const topTasks = useMemo(() => {
     const rank = { high: 0, medium: 1, low: 2 };
-
     return (Array.isArray(tasks) ? [...tasks] : [])
       .sort((a, b) => {
         const ad = a.status === "done" ? 1 : 0;
@@ -121,17 +119,20 @@ export default function TodayPage() {
       .slice(0, 5);
   }, [tasks]);
 
-  if (loading) {
-    return <div className="text-stone-500">Loading gently...</div>;
-  }
+  if (loading) return <div className="text-stone-500">Loading gently...</div>;
 
   return (
-    // more breathing room between panels
-    <div className="space-y-10">
+    // ✅ true separate panels with generous spacing
+    <div className="space-y-8">
       {/* 🌿 Today Summary */}
-      <Section
+      <GlassPanel
         title="Today"
         subtitle={`${tasks.length} tasks • ${habits.length} habits`}
+        rightSlot={
+          <span className="rounded-2xl border border-black/10 bg-white/70 px-3 py-2 text-xs text-stone-600">
+            calm pace ✿
+          </span>
+        }
       >
         {summaryError ? (
           <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
@@ -146,23 +147,21 @@ export default function TodayPage() {
             One small step is enough today.
           </div>
         )}
-      </Section>
+      </GlassPanel>
 
-      {/* subtle separator like your lined screenshot */}
-      <Divider />
-
-      {/* 🔔 Notifications (now its own panel/section) */}
-      <Section
+      {/* 🔔 Notifications (own glass panel) */}
+      <GlassPanel
         title="Notifications"
         subtitle="Gentle reminders — respectful of your timezone and quiet hours."
       >
+        {/* IMPORTANT: NotificationsCard already has a panel.
+            If you want a SINGLE panel look, we should make NotificationsCard “flat”.
+            For now: keep it, but it will look slightly nested. */}
         <NotificationsCard />
-      </Section>
-
-      <Divider />
+      </GlassPanel>
 
       {/* 🌱 Habits */}
-      <Section title="Habits" subtitle="Small check-ins, steady progress.">
+      <GlassPanel title="Habits" subtitle="Small check-ins, steady progress.">
         {habitsError ? (
           <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
             {habitsError}
@@ -174,12 +173,10 @@ export default function TodayPage() {
         ) : (
           <HabitList habits={habits} onCheckedIn={reload} />
         )}
-      </Section>
-
-      <Divider />
+      </GlassPanel>
 
       {/* 📋 Tasks */}
-      <Section title="Tasks" subtitle="One clear next step is enough.">
+      <GlassPanel title="Tasks" subtitle="One clear next step is enough.">
         {tasksError && (
           <div className="mb-3 rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
             {tasksError}
@@ -213,12 +210,10 @@ export default function TodayPage() {
             </a>
           </div>
         )}
-      </Section>
-
-      <Divider />
+      </GlassPanel>
 
       {/* 🌸 Reflection */}
-      <Section title="Reflection" subtitle="A gentle note for your future self.">
+      <GlassPanel title="Reflection" subtitle="A gentle note for your future self.">
         {reflectionError && (
           <div className="mb-3 rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
             {reflectionError}
@@ -226,7 +221,7 @@ export default function TodayPage() {
         )}
 
         <ReflectionComposer initial={reflection} onSaved={reload} />
-      </Section>
+      </GlassPanel>
     </div>
   );
 }
