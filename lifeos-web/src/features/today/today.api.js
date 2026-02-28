@@ -22,13 +22,13 @@ export async function getWeeklyAnalytics() {
 }
 
 export async function getTodayTasks() {
-  const res = await apiFetch("/api/tasks?includeDone=true");
-  return res.tasks ?? [];
+  const data = await apiFetch("/api/tasks?includeDone=true");
+  return asArray(data, "tasks");
 }
 
 export async function getHabits() {
   const data = await apiFetch("/api/habits");
-  return data?.habits ?? [];
+  return asArray(data, "habits");
 }
 
 export async function getTodayReflection() {
