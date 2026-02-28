@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import Section from "../../shared/ui/Section";
 import HabitList from "./components/HabitList";
 import { listHabits, createHabit, updateHabit, deleteHabit } from "./habits.api";
+// If you already created Sparkle.jsx earlier, you can uncomment this and use it later.
+// import Sparkle from "../../shared/ui/Sparkle";
 
 function GlassPanel({ children }) {
   return (
@@ -27,6 +29,27 @@ export default function HabitsPage() {
   // Inline edit
   const [editId, setEditId] = useState(null);
   const [draft, setDraft] = useState({ name: "", cadence: "daily", target: 1 });
+
+  // Toast (LifeOS soft feedback)
+  const [toast, setToast] = useState(null); // { message, tone }
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 1400);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  function showToast(message, tone = "ok") {
+    setToast({ message, tone });
+  }
+
+  // Confirm modal (LifeOS themed)
+  const [confirm, setConfirm] = useState(null);
+  function askConfirm(payload) {
+    setConfirm(payload);
+  }
+  function closeConfirm() {
+    setConfirm(null);
+  }
 
   async function load() {
     const h = await listHabits({ includeInactive });
@@ -72,6 +95,9 @@ export default function HabitsPage() {
       setTarget(1);
 
       await load();
+      showToast("Habit added 🌿", "ok");
+    } catch (e) {
+      showToast("Couldn’t add habit. Try again.", "warn");
     } finally {
       setBusyId(null);
     }
@@ -104,28 +130,96 @@ export default function HabitsPage() {
       });
       await load();
       cancelEdit();
+      showToast("Changes saved ✨", "ok");
+    } catch (e) {
+      showToast("Save failed. Please retry.", "warn");
     } finally {
       setBusyId(null);
     }
   }
 
   async function disableHabit(habitId) {
-    const yes = window.confirm("Disable this habit? (You can show inactive habits anytime.)");
-    if (!yes) return;
-
-    try {
-      setBusyId(habitId);
-      await deleteHabit(habitId); // backend soft-disables (active=0)
-      await load();
-    } finally {
-      setBusyId(null);
-    }
+    askConfirm({
+      title: "Disable this habit?",
+      body: "You can show inactive habits anytime.",
+      confirmText: "Disable",
+      tone: "danger",
+      onYes: async () => {
+        try {
+          setBusyId(habitId);
+          await deleteHabit(habitId); // backend soft-disables (active=0)
+          await load();
+          showToast("Habit disabled 🧺", "ok");
+        } catch (e) {
+          showToast("Disable failed. Try again.", "warn");
+        } finally {
+          setBusyId(null);
+          closeConfirm();
+        }
+      },
+    });
   }
 
   if (loading) return <div className="text-stone-500">Loading…</div>;
 
   return (
-    <div className="space-y-8">
+    <div className="relative space-y-8">
+      {/* Toast */}
+      {toast ? (
+        <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2">
+          <div
+            className={[
+              "rounded-2xl border px-4 py-2 text-xs shadow-sm backdrop-blur",
+              "bg-white/80",
+              toast.tone === "warn"
+                ? "border-rose-200 text-rose-700"
+                : "border-emerald-200 text-emerald-800",
+            ].join(" ")}
+          >
+            {toast.message}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Confirm Modal (soft gradient backdrop, LifeOS palette) */}
+      {confirm ? (
+        <div
+          className={[
+            "fixed inset-0 z-50 grid place-items-center p-4",
+            // Subtle vignette: lighter center, darker edges (not edgy black)
+            "bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.0)_0%,rgba(16,16,16,0.08)_55%,rgba(16,16,16,0.12)_100%)]",
+          ].join(" ")}
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-black/10 bg-white/85 p-4 shadow-lg backdrop-blur">
+            <div className="text-sm font-semibold text-stone-900">{confirm.title}</div>
+            <div className="mt-1 text-xs text-stone-600">{confirm.body}</div>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeConfirm}
+                className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 active:scale-[0.98]"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={confirm.onYes}
+                className={[
+                  "rounded-xl border px-3 py-2 text-xs font-medium transition active:scale-[0.98]",
+                  confirm.tone === "danger"
+                    ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+                ].join(" ")}
+              >
+                {confirm.confirmText ?? "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Manage */}
       <GlassPanel>
         <Section title="Habits" subtitle="Create, tweak, and keep your rhythms gentle.">
@@ -175,7 +269,7 @@ export default function HabitsPage() {
 
             <button
               disabled={busyId === "create"}
-              className="sm:col-span-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm hover:bg-white/85 disabled:opacity-60"
+              className="sm:col-span-2 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm hover:bg-white/85 active:scale-[0.99] disabled:opacity-60"
             >
               {busyId === "create" ? "Adding…" : "Add habit"}
             </button>
@@ -195,19 +289,17 @@ export default function HabitsPage() {
               return (
                 <div
                   key={h.id}
-                  className={`rounded-2xl border p-3 ${
-                    isInactive ? "border-black/5 bg-stone-50/60 opacity-75" : "border-black/5 bg-white/70"
-                  }`}
+                  className={[
+                    "rounded-2xl border p-3 transition-transform duration-150 ease-out hover:-translate-y-[1px]",
+                    isInactive ? "border-black/5 bg-stone-50/60 opacity-75" : "border-black/5 bg-white/70",
+                  ].join(" ")}
                 >
                   {!isEditing ? (
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-stone-900 truncate">
-                          {h.name}
-                        </div>
+                        <div className="text-sm font-medium text-stone-900 truncate">{h.name}</div>
                         <div className="mt-1 text-xs text-stone-500">
-                          {h.cadence} • target {h.target_per_period} per period{" "}
-                          {isInactive ? "• inactive" : ""}
+                          {h.cadence} • target {h.target_per_period} per period {isInactive ? "• inactive" : ""}
                         </div>
                       </div>
 
@@ -215,7 +307,7 @@ export default function HabitsPage() {
                         <button
                           type="button"
                           onClick={() => startEdit(h)}
-                          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50"
+                          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 active:scale-[0.98]"
                         >
                           Edit
                         </button>
@@ -225,7 +317,7 @@ export default function HabitsPage() {
                             type="button"
                             disabled={isBusy}
                             onClick={() => disableHabit(h.id)}
-                            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 active:scale-[0.98] disabled:opacity-60"
                             title="Disable habit"
                           >
                             Disable
@@ -264,7 +356,7 @@ export default function HabitsPage() {
                             type="button"
                             disabled={isBusy}
                             onClick={() => saveEdit(h.id)}
-                            className="w-full rounded-2xl border border-black/10 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 hover:bg-emerald-100 disabled:opacity-60"
+                            className="w-full rounded-2xl border border-black/10 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 hover:bg-emerald-100 active:scale-[0.99] disabled:opacity-60"
                           >
                             {isBusy ? "Saving…" : "Save"}
                           </button>
@@ -275,7 +367,7 @@ export default function HabitsPage() {
                         <button
                           type="button"
                           onClick={cancelEdit}
-                          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50"
+                          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 active:scale-[0.98]"
                         >
                           Cancel
                         </button>
