@@ -4,28 +4,27 @@ const ROUTES = {
   status: "/api/push/status",
   subscribe: "/api/push/subscribe",
   unsubscribe: "/api/push/unsubscribe",
+  test: "/api/push/test",
 };
 
 export function getPushStatus() {
   return apiFetch(ROUTES.status);
 }
 
-// Accept either:
-// - savePushSubscription(subJson)
-// - savePushSubscription({ subscription: subJson })
-export function savePushSubscription(input) {
-  const subscription = input?.subscription ?? input;
-
+export function savePushSubscription(subscriptionJson) {
   return apiFetch(ROUTES.subscribe, {
     method: "POST",
-    body: JSON.stringify({ subscription }),
+    body: JSON.stringify({ subscription: subscriptionJson }),
   });
 }
 
-// Backend should accept DELETE with { endpoint }
 export function deletePushSubscription(endpoint) {
   return apiFetch(ROUTES.unsubscribe, {
     method: "DELETE",
     body: JSON.stringify({ endpoint }),
   });
+}
+
+export function sendTestPush() {
+  return apiFetch(ROUTES.test, { method: "POST" });
 }
