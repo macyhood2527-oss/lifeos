@@ -268,7 +268,18 @@ export default function AnalyticsPage() {
       <div>
         <div className="text-sm font-medium text-stone-900">Reflections</div>
         <div className="mt-1 text-xs text-stone-500">
-          {data?.reflections?.count ?? 0} entries • avg mood: {data?.reflections?.avgMood ?? "—"}
+          {Array.isArray(data?.reflections) ? data.reflections.length : 0} entries this week
+          {" • "}
+          Avg mood:{" "}
+          {(() => {
+            const list = Array.isArray(data?.reflections) ? data.reflections : [];
+            const moods = list
+              .map((r) => Number(r?.mood))
+              .filter((m) => Number.isFinite(m));
+            if (!moods.length) return "—";
+            const avg = Math.round((moods.reduce((a, b) => a + b, 0) / moods.length) * 10) / 10;
+            return avg;
+          })()}
         </div>
       </div>
 
@@ -276,29 +287,16 @@ export default function AnalyticsPage() {
     </div>
 
     {(() => {
-      // Try to read moods from weekly analytics:
-      // Supports:
-      // 1) data.reflections.byDay = [{ date:"YYYY-MM-DD", mood:7 }, ...]
-      // 2) data.reflections.byDay = { "YYYY-MM-DD": { mood:7 }, ... } OR { "YYYY-MM-DD": 7 }
-      const byDay = data?.reflections?.byDay;
-      const start = data?.week?.start; // YYYY-MM-DD (Monday)
+      const weekStart = data?.week?.start; // YYYY-MM-DD (Monday)
+      const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-      const getMood = (ymd) => {
-        if (!byDay) return null;
-
-        // array form
-        if (Array.isArray(byDay)) {
-          const hit = byDay.find((x) => String(x?.date ?? x?.ymd ?? "").slice(0, 10) === ymd);
-          const m = hit?.mood ?? hit?.avgMood ?? hit?.value;
-          return m == null ? null : Number(m);
-        }
-
-        // object/map form
-        const v = byDay[ymd];
-        if (v == null) return null;
-        if (typeof v === "number") return Number(v);
-        const m = v?.mood ?? v?.avgMood ?? v?.value;
-        return m == null ? null : Number(m);
+      const addDays = (ymd, delta) => {
+        const d = new Date(ymd + "T00:00:00");
+        d.setDate(d.getDate() + delta);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
       };
 
       const moodToPastel = (mood) => {
@@ -319,62 +317,78 @@ export default function AnalyticsPage() {
         const MOOD_HIGH = { r: 255, g: 200, b: 225 }; // pink
 
         const x = clamp(m, 1, 10);
-        if (x <= 6) {
-          const t = (x - 1) / 5;
-          return css(mix(MOOD_LOW, MOOD_MID, t));
-        }
-        const t = (x - 6) / 4;
-        return css(mix(MOOD_MID, MOOD_HIGH, t));
+        if (x <= 6) return css(mix(MOOD_LOW, MOOD_MID, (x - 1) / 5));
+        return css(mix(MOOD_MID, MOOD_HIGH, (x - 6) / 4));
       };
 
-      const addDays = (ymd, delta) => {
-        const d = new Date(ymd + "T00:00:00");
-        d.setDate(d.getDate() + delta);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, "0");
-        const dd = String(d.getDate()).padStart(2, "0");
-        return `${yyyy}-${mm}-${dd}`;
+      const list = Array.isArray(data?.reflections) ? data.reflections : [];
+
+      const findByDate = (ymd) => {
+        return list.find((r) => String(r?.reflect_date ?? "").slice(0, 10) === ymd) ?? null;
       };
 
-      // If start isn't available, still render placeholders
-      const base = start || null;
-
-      const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      // If weekStart missing, show a gentle fallback (still pretty)
+      if (!weekStart) {
+        return (
+          <div className="mt-3 rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
+            Week range not available yet.
+          </div>
+        );
+      }
 
       return (
-        <>
-          <div className="mt-3 grid grid-cols-7 gap-2">
-            {labels.map((label, i) => {
-              const dayYMD = base ? addDays(base, i) : null;
-              const mood = dayYMD ? getMood(dayYMD) : null;
-              const bg = mood != null ? moodToPastel(mood) : "rgba(255,255,255,0.7)";
+        <div className="mt-3 grid grid-cols-7 gap-2">
+          {labels.map((label, i) => {
+            const ymd = addDays(weekStart, i);
+            const ref = findByDate(ymd);
+            const mood = ref?.mood != null ? Number(ref.mood) : null;
+            const bg = mood != null ? moodToPastel(mood) : "rgba(255,255,255,0.7)";
 
-              return (
-                <div
-                  key={label}
-                  className="rounded-2xl border border-black/10 px-2 py-2 text-center"
-                  style={{ backgroundColor: bg }}
-                  title={dayYMD ? `${dayYMD} — mood ${mood ?? "—"}` : label}
-                >
-                  <div className="text-[10px] text-stone-700">{label}</div>
-                  <div className={`mt-0.5 text-xs ${mood != null ? "text-stone-900" : "text-stone-500"}`}>
-                    {mood != null ? mood : "—"}
-                  </div>
+            return (
+              <div
+                key={label}
+                className="rounded-2xl border border-black/10 px-2 py-2 text-center"
+                style={{
+                  backgroundColor: bg,
+                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.35)",
+                }}
+                title={
+                  ref
+                    ? `${ymd} — mood ${mood}/10`
+                    : `${ymd} — no reflection`
+                }
+              >
+                <div className="text-[10px] text-stone-700">{label}</div>
+                <div className={`mt-0.5 text-xs ${mood != null ? "text-stone-900" : "text-stone-500"}`}>
+                  {mood != null ? mood : "—"}
                 </div>
-              );
-            })}
-          </div>
 
-          {!data?.reflections?.byDay ? (
-            <div className="mt-2 text-xs text-stone-500">
-              (Optional) If you want this to reflect real moods, return <span className="font-medium">reflections.byDay</span> from{" "}
-              <span className="font-medium">/api/analytics/weekly</span>.
-            </div>
-          ) : null}
-        </>
+                {/* tiny dot indicator if there's a reflection */}
+                <div className="mt-1 flex justify-center">
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      ref ? "bg-stone-700/60" : "bg-stone-400/30"
+                    }`}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       );
     })()}
   </div>
+
+  {/* Notifications */}
+  <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
+    <div className="text-sm font-medium text-stone-900">Notifications</div>
+    <div className="mt-2 text-xs text-stone-600">
+      Sent: <span className="text-stone-800">{data?.push?.sent ?? 0}</span> • Failed:{" "}
+      <span className="text-stone-800">{data?.push?.failed ?? 0}</span> • Skipped:{" "}
+      <span className="text-stone-800">{data?.push?.skipped ?? 0}</span>
+    </div>
+  </div>
+</div>
 
   {/* Notifications */}
   <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
