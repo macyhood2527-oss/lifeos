@@ -4,6 +4,9 @@ import TaskList from "../tasks/components/TaskList";
 import TaskComposer from "../tasks/components/TaskComposer";
 import ReflectionComposer from "../reflections/components/ReflectionComposer";
 
+// ✅ adjust if your path differs
+import NotificationsCard from "../notifications/NotificationsCard";
+
 import {
   getWeeklyAnalytics,
   getTodayTasks,
@@ -43,14 +46,21 @@ function GlassCard({ title, subtitle, accent = "emerald", children }) {
   );
 }
 
+function SoftSectionSpacer() {
+  return (
+    <div className="py-1">
+      <div className="h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+    </div>
+  );
+}
+
 export default function TodayPage() {
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
   const [habits, setHabits] = useState([]);
   const [reflection, setReflection] = useState(null);
   const [weekly, setWeekly] = useState(null);
-
-  const [toast, setToast] = useState(null); // string | null
+  const [toast, setToast] = useState(null);
 
   async function reload() {
     const [t, h, r, w] = await Promise.all([
@@ -90,7 +100,8 @@ export default function TodayPage() {
   }
 
   return (
-    <div className="space-y-5">
+    // ✅ more breathing room overall
+    <div className="space-y-7">
       {/* Toast */}
       {toast ? (
         <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2">
@@ -100,7 +111,7 @@ export default function TodayPage() {
         </div>
       ) : null}
 
-      {/* Page header */}
+      {/* Today summary card */}
       <section className="rounded-3xl border border-black/5 bg-white/65 p-4 shadow-sm backdrop-blur">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -124,19 +135,32 @@ export default function TodayPage() {
         ) : null}
       </section>
 
+      {/* ✅ Notifications in its own panel (separate, with spacing) */}
+      <GlassCard
+        title="Notifications"
+        subtitle="Gentle reminders — respectful of your timezone and quiet hours."
+        accent="emerald"
+      >
+        <NotificationsCard />
+      </GlassCard>
+
+      <SoftSectionSpacer />
+
       {/* Habits card */}
       <GlassCard
         title="Habits"
-        subtitle="Tiny check-ins count. No pressure."
+        subtitle="Small check-ins, steady progress."
         accent="emerald"
       >
         <HabitList habits={habits} onCheckedIn={reload} />
       </GlassCard>
 
+      <SoftSectionSpacer />
+
       {/* Tasks card */}
       <GlassCard
         title="Tasks"
-        subtitle="Pick one thing. Then the next."
+        subtitle="One clear next step is enough."
         accent="stone"
       >
         <div className="space-y-3">
@@ -144,6 +168,8 @@ export default function TodayPage() {
           <TaskList tasks={tasks} onUpdated={reload} />
         </div>
       </GlassCard>
+
+      <SoftSectionSpacer />
 
       {/* Reflection card */}
       <GlassCard
