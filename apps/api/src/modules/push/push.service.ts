@@ -1,7 +1,6 @@
 import { pool } from "../../db/pool";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
-
 type SubRow = RowDataPacket & {
   id: number;
   user_id: number;
@@ -13,22 +12,19 @@ type SubRow = RowDataPacket & {
 
 export async function upsertSubscription(
   userId: number,
-  input: { endpoint: string; keys: { p256dh: string; auth: string } },
-  userAgent?: string | null
+  input: { endpoint: string; keys: { p256dh: string; auth: string } }
 ) {
-  await pool.execute(
+  // One subscription per endpoint (or per user if you prefer)
+  await pool.execute<ResultSetHeader>(
     `
-    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, last_seen_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3), NOW(3))
+    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+    VALUES (?, ?, ?, ?, NOW(3))
     ON DUPLICATE KEY UPDATE
       user_id=VALUES(user_id),
       p256dh=VALUES(p256dh),
-      auth=VALUES(auth),
-      user_agent=VALUES(user_agent),
-      last_seen_at=NOW(3),
-      updated_at=NOW(3)
+      auth=VALUES(auth)
     `,
-    [userId, input.endpoint, input.keys.p256dh, input.keys.auth, userAgent ?? null]
+    [userId, input.endpoint, input.keys.p256dh, input.keys.auth]
   );
 
   const [rows] = await pool.query<SubRow[]>(
@@ -38,6 +34,7 @@ export async function upsertSubscription(
 
   return rows[0] ?? null;
 }
+
 export async function removeSubscription(userId: number, endpoint: string) {
   const [result] = await pool.execute<ResultSetHeader>(
     `DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?`,
@@ -48,7 +45,7 @@ export async function removeSubscription(userId: number, endpoint: string) {
 
 export async function listSubscriptions(userId: number) {
   const [rows] = await pool.query<SubRow[]>(
-    `SELECT * FROM push_subscriptions WHERE user_id=?`,
+    `SELECT * FROM push_subscriptions WHERE user_id=? ORDER BY id DESC`,
     [userId]
   );
   return rows;
@@ -56,10 +53,13 @@ export async function listSubscriptions(userId: number) {
 
 export async function getLatestSubscription(userId: number) {
   const [rows] = await pool.query<SubRow[]>(
-    `SELECT * FROM push_subscriptions
-     WHERE user_id=?
-     ORDER BY last_seen_at DESC, id DESC
-     LIMIT 1`,
+    `
+    SELECT *
+    FROM push_subscriptions
+    WHERE user_id=?
+    ORDER BY id DESC
+    LIMIT 1
+    `,
     [userId]
   );
   return rows[0] ?? null;
