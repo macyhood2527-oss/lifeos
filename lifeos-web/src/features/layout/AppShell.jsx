@@ -136,7 +136,7 @@ export default function AppShell() {
                 <img
                   src={lifeosBanner}
                   alt="LifeOS"
-                  className="h-28 md:h-36 w-full object-contain select-none float-soft"
+                  className="h-36 md:h-52 w-full object-contain select-none float-soft"
                   draggable="false"
                 />
               </div>
