@@ -4,6 +4,14 @@ import TaskComposer from "./components/TaskComposer";
 import TaskList from "./components/TaskList";
 import { listTodayTasks } from "./tasks.api";
 
+function GlassPanel({ children }) {
+  return (
+    <div className="rounded-3xl border border-black/5 bg-white/55 shadow-sm backdrop-blur-md">
+      <div className="p-5">{children}</div>
+    </div>
+  );
+}
+
 export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
@@ -27,12 +35,21 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-8">
-      <Section title="Tasks" subtitle="One clear next step is enough.">
-        <TaskComposer onCreated={load} />
-        <div className="mt-3">
-          <TaskList tasks={tasks} onUpdated={load} />
-        </div>
-      </Section>
+      <GlassPanel>
+        <Section title="Tasks" subtitle="One clear next step is enough.">
+          <TaskComposer onCreated={load} />
+
+          <div className="mt-3">
+            {Array.isArray(tasks) && tasks.length > 0 ? (
+              <TaskList tasks={tasks} onUpdated={load} />
+            ) : (
+              <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
+                Nothing here yet. Add one gentle task for today.
+              </div>
+            )}
+          </div>
+        </Section>
+      </GlassPanel>
     </div>
   );
 }
