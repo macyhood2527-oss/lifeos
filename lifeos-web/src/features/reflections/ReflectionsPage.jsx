@@ -25,13 +25,6 @@ function ymdLocal(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function fmtYMD(d) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 function startOfMonth(d) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
@@ -82,15 +75,6 @@ function buildMonthGrid(viewDate) {
 
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
-}
-
-function startOfWeekMonday(d) {
-  const x = new Date(d);
-  const day = x.getDay(); // 0 Sun..6 Sat
-  const diff = day === 0 ? -6 : 1 - day; // go back to Monday
-  x.setDate(x.getDate() + diff);
-  x.setHours(0, 0, 0, 0);
-  return x;
 }
 
 function previewText(r) {
@@ -193,24 +177,6 @@ export default function ReflectionsPage() {
   const monthCells = useMemo(() => buildMonthGrid(viewDate), [viewDate]);
   const weekLabels = useMemo(() => weekdayShortLabels(), []);
 
-  // 7-day mood strip for the selected week (Mon-Sun)
-  const selectedDateObj = useMemo(
-    () => new Date(selectedYMD + "T00:00:00"),
-    [selectedYMD]
-  );
-
-  const weekDays = useMemo(() => {
-    const start = startOfWeekMonday(selectedDateObj);
-    return Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      const key = fmtYMD(d);
-      const ref = byDate.get(key);
-      const moodBg = ref?.mood != null ? moodToPastelColor(ref.mood) : null;
-      return { d, key, ref, moodBg };
-    });
-  }, [selectedDateObj, byDate]);
-
   if (loading) return <div className="text-stone-500">Loading gently...</div>;
 
   return (
@@ -240,56 +206,6 @@ export default function ReflectionsPage() {
                 >
                   →
                 </button>
-              </div>
-
-              {/* Mood week strip (7 boxes) */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-stone-500">Mood this week</div>
-                  <div className="text-xs text-stone-500">Mon → Sun</div>
-                </div>
-
-                <div className="mt-2 grid grid-cols-7 gap-2">
-                  {weekDays.map((w) => {
-                    const isSel = w.key === selectedYMD;
-                    const label = w.d.toLocaleDateString(undefined, { weekday: "short" });
-
-                    return (
-                      <button
-                        key={w.key}
-                        type="button"
-                        onClick={() => {
-                          setSelectedYMD(w.key);
-                          setViewDate(startOfMonth(w.d));
-                        }}
-                        className={`h-9 rounded-2xl border transition active:scale-[0.98] ${
-                          isSel
-                            ? "border-emerald-300 ring-2 ring-emerald-200"
-                            : "border-black/10"
-                        }`}
-                        style={{
-                          backgroundColor: w.moodBg ?? "rgba(255,255,255,0.65)",
-                        }}
-                        title={
-                          w.ref?.mood != null
-                            ? `${w.key} — mood ${w.ref.mood}/10`
-                            : `${w.key} — no mood`
-                        }
-                      >
-                        <div className="flex h-full flex-col items-center justify-center leading-tight">
-                          <div className="text-[10px] text-stone-700">{label}</div>
-                          <div
-                            className={`text-xs ${
-                              w.ref?.mood != null ? "text-stone-900" : "text-stone-500"
-                            }`}
-                          >
-                            {w.ref?.mood != null ? w.ref.mood : "—"}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
 
               {/* Weekday labels */}
@@ -326,7 +242,11 @@ export default function ReflectionsPage() {
                             : "bg-white/80 hover:bg-stone-50"
                         }
                       `}
-                      title={key}
+                      title={
+                        ref?.mood != null
+                          ? `${key} — mood ${ref.mood}/10`
+                          : key
+                      }
                     >
                       <div className={isToday ? "font-semibold text-emerald-900" : "text-stone-900"}>
                         {d.getDate()}
