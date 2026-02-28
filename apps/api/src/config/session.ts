@@ -23,8 +23,8 @@ export function createSessionMiddleware() {
     store: sessionStore,
     cookie: {
       httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
+      sameSite: "none",
+secure: true,
       maxAge: 14 * 24 * 60 * 60 * 1000
     }
   });
