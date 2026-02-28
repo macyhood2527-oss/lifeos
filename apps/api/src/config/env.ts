@@ -9,9 +9,10 @@ const EnvSchema = z.object({
   DB_USER: z.string().min(1),
   DB_PASSWORD: z.string().min(1),
   DB_NAME: z.string().min(1),
-
+  
   SESSION_SECRET: z.string().min(24),
   SESSION_COOKIE_NAME: z.string().min(1).default("lifeos.sid"),
+  JWT_SECRET: z.string().min(24),
 
   CORS_ORIGIN: z.string().min(1),
 
