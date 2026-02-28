@@ -1,7 +1,7 @@
 // lifeos-web/src/features/tasks/components/TaskList.jsx
 import { useEffect, useState } from "react";
 import { updateTask, deleteTask } from "../tasks.api";
-import Sparkle from "../../../shared/ui/Sparkle"; // adjust if your folders differ
+import Sparkle from "../../../shared/ui/Sparkle";
 
 export default function TaskList({ tasks, onUpdated }) {
   const [busyId, setBusyId] = useState(null);
@@ -134,15 +134,10 @@ export default function TaskList({ tasks, onUpdated }) {
         </div>
       ) : null}
 
-      {/* Confirm Modal (soft radial gradient backdrop) */}
+      {/* Confirm Modal (NO backdrop panel — Option 1) */}
       {confirm ? (
-        <div
-          className={[
-            "fixed inset-0 z-50 grid place-items-center p-4",
-            "bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.0)_0%,rgba(16,16,16,0.08)_55%,rgba(16,16,16,0.12)_100%)]",
-          ].join(" ")}
-        >
-          <div className="w-full max-w-sm rounded-3xl border border-black/10 bg-white/85 p-4 shadow-lg backdrop-blur">
+        <div className="fixed inset-0 z-50 grid place-items-center p-4 pointer-events-none">
+          <div className="pointer-events-auto w-full max-w-sm rounded-3xl border border-black/10 bg-white/95 p-4 shadow-xl backdrop-blur">
             <div className="text-sm font-semibold text-stone-900">{confirm.title}</div>
             <div className="mt-1 text-xs text-stone-600">{confirm.body}</div>
 
