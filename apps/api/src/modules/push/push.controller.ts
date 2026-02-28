@@ -26,6 +26,32 @@ function getUserId(req: Request) {
   return (req as any).user?.id as number;
 }
 
+// ✅ exposes the public VAPID key for the frontend
+export async function getVapidPublicKey(_req: Request, res: Response) {
+  configureWebPush();
+
+  if (!isWebPushConfigured()) {
+    return res.status(503).json({
+      message: "Push notifications are not configured yet.",
+      details: getWebPushConfigError(),
+      configured: false,
+    });
+  }
+
+  // read from env through your webpush config
+  const publicKey = process.env.VAPID_PUBLIC_KEY || process.env.WEBPUSH_VAPID_PUBLIC_KEY;
+
+  if (!publicKey) {
+    return res.status(503).json({
+      message: "VAPID public key is missing.",
+      details: "Set VAPID_PUBLIC_KEY in Render environment variables.",
+      configured: false,
+    });
+  }
+
+  return res.json({ publicKey });
+}
+
 // ✅ fixes 404 /api/push/status
 export async function status(req: Request, res: Response) {
   configureWebPush();
@@ -65,6 +91,8 @@ export async function subscribe(req: Request, res: Response) {
   await upsertSubscription(userId, sub);
   return res.status(201).json({ ok: true });
 }
+
+
 
 export async function unsubscribe(req: Request, res: Response) {
   const userId = getUserId(req);
