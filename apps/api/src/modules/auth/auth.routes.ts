@@ -4,6 +4,7 @@ import { env } from "../../config/env";
 import { authRateLimit } from "../../middlewares/rateLimit";
 import { me, logout } from "./auth.controller";
 import { requireAuth } from "./auth.middleware";
+import { signAccessToken } from "./jwt"; // add this import
 
 export const authRouter = Router();
 
@@ -15,12 +16,18 @@ authRouter.get(
 );
 
 // Callback
+
+
 authRouter.get(
   "/google/callback",
   passport.authenticate("google", { failureRedirect: `${env.WEB_APP_URL}/login?error=oauth` }),
-  (_req, res) => {
-    // After login, redirect to web
-    res.redirect(`${env.WEB_APP_URL}/`);
+  (req, res) => {
+    // passport puts user on req.user
+    const u = req.user as any;
+    const token = signAccessToken({ userId: u.id });
+
+    // ✅ send token to frontend via hash (not query)
+    res.redirect(`${env.WEB_APP_URL}/auth/callback#token=${token}`);
   }
 );
 
