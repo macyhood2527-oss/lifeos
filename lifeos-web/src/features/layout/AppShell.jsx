@@ -6,9 +6,7 @@ import lifeosBanner from "../../assets/lifeos-banner.png";
 
 const linkBase =
   "relative shrink-0 rounded-2xl px-3 py-2 text-sm whitespace-nowrap " +
-  "transition-all duration-200 ease-out " +
-  "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 " +
-  "active:scale-[0.98]";
+  "transition-all duration-200 ease-out active:scale-[0.98]";
 
 function linkClass({ isActive }) {
   return `${linkBase} ${
@@ -26,9 +24,9 @@ export default function AppShell() {
     ? `Hi, ${user.name} 🌷 small wins, gently.`
     : "Hi 🌷 small wins, gently.";
 
-  // --- animated indicator state for tabs ---
+  // ----- Tab indicator -----
   const navRef = useRef(null);
-  const itemRefs = useRef(new Map()); // key -> element
+  const itemRefs = useRef(new Map());
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
 
   const tabs = [
@@ -68,14 +66,12 @@ export default function AppShell() {
 
   useLayoutEffect(() => {
     measureIndicator();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   useEffect(() => {
     const onResize = () => measureIndicator();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -89,72 +85,84 @@ export default function AppShell() {
         backgroundAttachment: "fixed",
       }}
     >
-      {/* Local animations (fade + float) */}
+      {/* Custom animations */}
       <style>{`
-        @keyframes lifeosFadeUp {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes lifeosFloat {
-          0%   { transform: translateY(0); }
-          50%  { transform: translateY(-3px); }
+
+        @keyframes floatSoft {
+          0% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
           100% { transform: translateY(0); }
         }
-        .lifeos-fade {
-          animation: lifeosFadeUp 520ms ease-out both;
+
+        .fade-up {
+          animation: fadeUp 600ms ease-out both;
         }
-        .lifeos-float {
-          animation: lifeosFloat 4.2s ease-in-out infinite;
+
+        .float-soft {
+          animation: floatSoft 4.5s ease-in-out infinite;
         }
       `}</style>
 
       <div className="min-h-screen bg-gradient-to-b from-emerald-50/80 via-rose-50/70 to-stone-50/80 backdrop-blur-[1px]">
         <div className="mx-auto max-w-5xl p-4 md:p-6">
-          {/* Header panel */}
-          <div className="rounded-3xl border border-black/5 bg-white/55 backdrop-blur shadow-sm overflow-hidden lifeos-fade">
-            <header className="relative px-4 pt-4 pb-3">
-              {/* Logout top-right */}
-              <div className="flex items-start justify-end">
+
+          {/* ===== HEADER ===== */}
+          <div className="relative rounded-3xl border border-black/5 shadow-sm overflow-hidden fade-up">
+
+            {/* Glass gradient base */}
+            <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-white/40 to-white/85 backdrop-blur-lg" />
+
+            {/* Extra soft overlay fade (top transparent feel) */}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/20 to-transparent pointer-events-none" />
+
+            <header className="relative px-4 pt-4 pb-5">
+
+              {/* Logout top right */}
+              <div className="flex justify-end">
                 <button
                   onClick={logout}
-                  className="shrink-0 rounded-2xl border border-black/10 bg-white/80 px-3 py-2 text-sm transition hover:bg-white active:scale-[0.98]"
+                  className="rounded-2xl border border-black/10 bg-white/80 px-3 py-2 text-sm transition hover:bg-white active:scale-[0.98]"
                 >
                   Logout
                 </button>
               </div>
 
-              {/* Banner centered */}
-              <div className="mt-1 flex justify-center">
+              {/* Banner full width */}
+              <div className="mt-2 flex justify-center">
                 <img
                   src={lifeosBanner}
                   alt="LifeOS"
-                  className="h-16 md:h-20 w-auto object-contain select-none lifeos-float"
+                  className="h-28 md:h-36 w-full object-contain select-none float-soft"
                   draggable="false"
                 />
               </div>
 
-              {/* Greeting centered */}
+              {/* Greeting */}
               <div className="mt-2 text-center text-xs text-stone-600 truncate">
                 {greeting}
               </div>
 
-              {/* Subtle divider */}
-              <div className="mt-3 h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+              {/* Divider */}
+              <div className="mt-4 h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
             </header>
           </div>
 
-          {/* Sticky tabs */}
-          <div className="sticky top-0 z-30 mt-3">
-            {/* Less bulky: lighter container */}
+          {/* ===== TABS ===== */}
+          <div className="sticky top-0 z-30 mt-4">
             <div className="rounded-3xl border border-black/5 bg-white/45 backdrop-blur shadow-sm">
               <nav className="px-3 py-2">
                 <div className="overflow-x-auto no-scrollbar scroll-smooth">
-                  {/* Measuring container */}
-                  <div ref={navRef} className="relative flex items-center gap-2 min-w-max py-1">
-                    {/* Sliding pill highlight */}
+                  <div
+                    ref={navRef}
+                    className="relative flex items-center gap-2 min-w-max py-1"
+                  >
+                    {/* Sliding highlight */}
                     <div
-                      aria-hidden="true"
-                      className="absolute top-1/2 -translate-y-1/2 rounded-2xl border border-black/10 bg-white/80 shadow-sm transition-[transform,width,opacity] duration-300 ease-out"
+                      className="absolute top-1/2 -translate-y-1/2 rounded-2xl border border-black/10 bg-white/80 shadow-sm transition-all duration-300 ease-out"
                       style={{
                         transform: `translateX(${indicator.left}px) translateY(-50%)`,
                         width: indicator.width,
@@ -174,7 +182,6 @@ export default function AppShell() {
                           else itemRefs.current.set(t.key, node);
                         }}
                       >
-                        {/* keep text above the pill */}
                         <span className="relative z-10">{t.label}</span>
                       </NavLink>
                     ))}
@@ -184,18 +191,19 @@ export default function AppShell() {
             </div>
           </div>
 
-          {/* Main content */}
-          <main className="mt-4 rounded-3xl border border-black/5 bg-white/70 p-4 md:p-6 shadow-sm backdrop-blur transition-all duration-300 hover:shadow-md hover:-translate-y-[2px]">
+          {/* ===== MAIN ===== */}
+          <main className="mt-5 rounded-3xl border border-black/5 bg-white/70 p-4 md:p-6 shadow-sm backdrop-blur transition-all duration-300 hover:shadow-md hover:-translate-y-[2px]">
             <Outlet />
           </main>
 
-          {/* Footer */}
+          {/* ===== FOOTER ===== */}
           <footer className="mt-6 text-center text-xs text-stone-500">
             <div className="rounded-3xl border border-black/5 bg-white/40 px-4 py-4 backdrop-blur">
-              <div>✨ Built gently by Melissa Marcelo || 🌸.</div>
+              <div>✨ Built gently by Melissa Marcelo 🌸</div>
               <div className="mt-1">LifeOS — calm progress over pressure.</div>
             </div>
           </footer>
+
         </div>
       </div>
     </div>
