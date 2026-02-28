@@ -23,6 +23,7 @@ import { reflectionsRouter } from "./modules/reflections/reflections.routes";
 import { analyticsRouter } from "./modules/analytics/analytics.routes";
 import { pushRouter } from "./modules/push/push.routes";
 import { remindersRouter } from "./modules/reminders/reminders.routes";
+import pushRoutes from "./modules/push/push.routes";
 
 export function createApp() {
   const app = express();
@@ -58,7 +59,7 @@ export function createApp() {
 
   app.use("/api/habits", habitsRouter);
   app.use("/api/reflections", reflectionsRouter);
-
+app.use("/api/push", pushRoutes);
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/push", pushRouter);
   app.use("/api/reminders", remindersRouter);
