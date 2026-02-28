@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Section from "../../shared/ui/Section";
 import { getWeeklyAnalytics } from "./analytics.api";
 
-// ✅ adjust if your path differs
+// ✅ adjust path if yours differs
 import { listReflections } from "../reflections/reflections.api";
 
 import {
@@ -16,6 +16,7 @@ import {
   YAxis,
   Tooltip,
   Area,
+  ReferenceDot,
 } from "recharts";
 
 // Pastel palette (soft, varied)
@@ -80,12 +81,36 @@ function buildMoodInsight(series) {
   return "Mood dipped noticeably — be extra kind to yourself.";
 }
 
+/* =========================
+   Cute tooltip
+========================= */
+function MoodTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+
+  const v = payload[0]?.value;
+  const ymd = payload[0]?.payload?.ymd;
+
+  const mood = Number.isFinite(Number(v)) ? Number(v) : null;
+
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white/90 px-3 py-2 text-xs shadow-sm backdrop-blur">
+      <div className="text-stone-900 font-medium">{label}</div>
+      <div className="text-stone-500">{ymd}</div>
+      <div className="mt-1 text-stone-800">
+        Mood:{" "}
+        <span className="font-semibold">
+          {mood != null ? `${mood}/10` : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [weekStart, setWeekStart] = useState(null);
 
-  // reflections list (client-filtered for the week)
   const [allReflections, setAllReflections] = useState([]);
 
   // Micro-interaction state
@@ -99,7 +124,15 @@ export default function AnalyticsPage() {
 
     // ✅ secondary fetch (no backend change)
     const list = await listReflections({ limit: 120 }).catch(() => []);
-    setAllReflections(Array.isArray(list) ? list : []);
+
+    // ✅ support both: array OR { reflections: [...] }
+    const arr = Array.isArray(list)
+      ? list
+      : Array.isArray(list?.reflections)
+        ? list.reflections
+        : [];
+
+    setAllReflections(arr);
   }
 
   useEffect(() => {
@@ -354,7 +387,6 @@ export default function AnalyticsPage() {
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={moodSeries} margin={{ top: 6, right: 10, bottom: 0, left: -20 }}>
-                    {/* defs for gradient line + soft fill */}
                     <defs>
                       <linearGradient id="moodLine" x1="0" y1="0" x2="1" y2="0">
                         <stop offset="0%" stopColor="#BEE3F8" />
@@ -363,20 +395,18 @@ export default function AnalyticsPage() {
                       </linearGradient>
 
                       <linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.28" />
-                        <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.02" />
+                        <stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.22" />
+                        <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.03" />
                       </linearGradient>
                     </defs>
 
                     <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
                     <YAxis domain={[1, 10]} hide />
 
-                    <Tooltip
-                      formatter={(v) => (v == null ? "—" : `${v}/10`)}
-                      labelFormatter={(l) => String(l)}
-                    />
+                    {/* custom tooltip */}
+                    <Tooltip content={<MoodTooltip />} cursor={{ stroke: "rgba(0,0,0,0.06)" }} />
 
-                    {/* soft fill (Area) behind */}
+                    {/* fill */}
                     <Area
                       type="monotone"
                       dataKey="mood"
@@ -385,6 +415,22 @@ export default function AnalyticsPage() {
                       isAnimationActive={true}
                       connectNulls={false}
                     />
+
+                    {/* faint dots for missing days */}
+                    {moodSeries
+                      .filter((p) => p.mood == null)
+                      .map((p) => (
+                        <ReferenceDot
+                          key={p.day}
+                          x={p.day}
+                          y={5.5} // gentle baseline dot
+                          r={4}
+                          fill="rgba(0,0,0,0.08)"
+                          stroke="rgba(255,255,255,0.7)"
+                          strokeWidth={1}
+                          ifOverflow="extendDomain"
+                        />
+                      ))}
 
                     {/* gradient line */}
                     <Line
