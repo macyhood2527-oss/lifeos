@@ -2,8 +2,8 @@ import type { Request, Response } from "express";
 import { env } from "../../config/env";
 
 export function me(req: Request, res: Response) {
-  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-  return res.json({ user: req.user });
+  const user = (req as any).user;
+  return res.json({ user });
 }
 
 export function logout(req: Request, res: Response) {
