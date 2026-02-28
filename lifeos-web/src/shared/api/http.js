@@ -1,9 +1,12 @@
 export async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem("lifeos_token");
+
   const res = await fetch(path, {
     ...options,
-    credentials: "include",
+    credentials: "include", // can stay; not required anymore
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
   });
