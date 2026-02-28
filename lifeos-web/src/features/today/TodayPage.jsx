@@ -13,6 +13,14 @@ import {
   getTodayReflection,
 } from "./today.api";
 
+function Divider() {
+  return (
+    <div className="py-2">
+      <div className="h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+    </div>
+  );
+}
+
 export default function TodayPage() {
   const [loading, setLoading] = useState(true);
 
@@ -46,7 +54,7 @@ export default function TodayPage() {
       setTasks(results[0].value ?? []);
     } else {
       console.error("getTodayTasks failed:", results[0].reason);
-      setTasks([]); // keep UI stable
+      setTasks([]);
       setTasksError("Tasks couldn't load right now.");
     }
 
@@ -55,7 +63,7 @@ export default function TodayPage() {
       setHabits(results[1].value ?? []);
     } else {
       console.error("getHabits failed:", results[1].reason);
-      setHabits([]); // keep UI stable
+      setHabits([]);
       setHabitsError("Habits couldn't load right now.");
     }
 
@@ -97,18 +105,15 @@ export default function TodayPage() {
     const rank = { high: 0, medium: 1, low: 2 };
 
     return (Array.isArray(tasks) ? [...tasks] : [])
-      // not-done first
       .sort((a, b) => {
         const ad = a.status === "done" ? 1 : 0;
         const bd = b.status === "done" ? 1 : 0;
         if (ad !== bd) return ad - bd;
 
-        // priority high -> low
         const ap = rank[a.priority] ?? 1;
         const bp = rank[b.priority] ?? 1;
         if (ap !== bp) return ap - bp;
 
-        // oldest -> newest
         const at = new Date(a.created_at ?? 0).getTime();
         const bt = new Date(b.created_at ?? 0).getTime();
         return at - bt;
@@ -116,13 +121,13 @@ export default function TodayPage() {
       .slice(0, 5);
   }, [tasks]);
 
-  // ⏳ Loading state
   if (loading) {
     return <div className="text-stone-500">Loading gently...</div>;
   }
 
   return (
-    <div className="space-y-8">
+    // more breathing room between panels
+    <div className="space-y-10">
       {/* 🌿 Today Summary */}
       <Section
         title="Today"
@@ -143,7 +148,18 @@ export default function TodayPage() {
         )}
       </Section>
 
-      <NotificationsCard />
+      {/* subtle separator like your lined screenshot */}
+      <Divider />
+
+      {/* 🔔 Notifications (now its own panel/section) */}
+      <Section
+        title="Notifications"
+        subtitle="Gentle reminders — respectful of your timezone and quiet hours."
+      >
+        <NotificationsCard />
+      </Section>
+
+      <Divider />
 
       {/* 🌱 Habits */}
       <Section title="Habits" subtitle="Small check-ins, steady progress.">
@@ -159,6 +175,8 @@ export default function TodayPage() {
           <HabitList habits={habits} onCheckedIn={reload} />
         )}
       </Section>
+
+      <Divider />
 
       {/* 📋 Tasks */}
       <Section title="Tasks" subtitle="One clear next step is enough.">
@@ -185,7 +203,6 @@ export default function TodayPage() {
           )}
         </div>
 
-        {/* View all tasks link */}
         {tasks.length > 5 && (
           <div className="mt-3 text-right">
             <a
@@ -197,6 +214,8 @@ export default function TodayPage() {
           </div>
         )}
       </Section>
+
+      <Divider />
 
       {/* 🌸 Reflection */}
       <Section title="Reflection" subtitle="A gentle note for your future self.">
