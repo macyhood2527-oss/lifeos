@@ -15,15 +15,30 @@ function requirePushReady(res: Response) {
   configureWebPush();
   if (!isWebPushConfigured()) {
     return res.status(503).json({
-      error: "Push notifications are not configured yet.",
+      message: "Push notifications are not configured yet.",
       details: getWebPushConfigError(),
+      configured: false,
     });
   }
   return null;
 }
 
 function getUserId(req: Request) {
-  return (req as any).user.id as number;
+  return (req as any).user?.id as number;
+}
+
+export async function status(req: Request, res: Response) {
+  // Don't hard-fail if not configured; frontend needs a stable response.
+  configureWebPush();
+
+  const userId = getUserId(req);
+  const latest = userId ? await getLatestSubscription(userId) : null;
+
+  return res.json({
+    configured: isWebPushConfigured(),
+    publicKeyPresent: Boolean(env.VAPID_PUBLIC_KEY),
+    subscribed: Boolean(latest),
+  });
 }
 
 export async function getVapidPublicKey(_req: Request, res: Response) {
@@ -37,13 +52,21 @@ export async function subscribe(req: Request, res: Response) {
   const blocked = requirePushReady(res);
   if (blocked) return;
 
-  const sub = req.body;
+  // ✅ Accept both shapes:
+  // 1) { subscription: {...} }  (frontend)
+  // 2) {...}                    (raw)
+  const sub = req.body?.subscription ?? req.body;
 
   if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
-    return res.status(400).json({ error: "Invalid subscription object." });
+    return res.status(400).json({
+      message: "Invalid subscription object.",
+      expected: { endpoint: "...", keys: { p256dh: "...", auth: "..." } },
+    });
   }
 
   const userId = getUserId(req);
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
   const userAgent = req.get("user-agent") ?? null;
 
   await upsertSubscription(userId, sub, userAgent);
@@ -53,9 +76,10 @@ export async function subscribe(req: Request, res: Response) {
 
 export async function unsubscribe(req: Request, res: Response) {
   const userId = getUserId(req);
-  const endpoint = req.body?.endpoint;
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-  if (!endpoint) return res.status(400).json({ error: "endpoint is required" });
+  const endpoint = req.body?.endpoint;
+  if (!endpoint) return res.status(400).json({ message: "endpoint is required" });
 
   const removed = await removeSubscription(userId, endpoint);
   return res.json({ ok: true, removed });
@@ -66,9 +90,10 @@ export async function test(req: Request, res: Response) {
   if (blocked) return;
 
   const userId = getUserId(req);
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
   const row = await getLatestSubscription(userId);
-  if (!row) return res.status(404).json({ error: "No subscription found. Subscribe first." });
+  if (!row) return res.status(404).json({ message: "No subscription found. Subscribe first." });
 
   const subscription = {
     endpoint: row.endpoint,
@@ -82,19 +107,18 @@ export async function test(req: Request, res: Response) {
     await sendTestPush(subscription);
     return res.json({ ok: true });
   } catch (err: any) {
-    const status = err?.statusCode || err?.status || 500;
+    const statusCode = err?.statusCode || err?.status || 500;
 
-    // subscription expired/invalid → cleanup so user can re-subscribe cleanly
-    if (status === 404 || status === 410) {
+    if (statusCode === 404 || statusCode === 410) {
       await removeSubscriptionById(userId, row.id);
       return res.status(410).json({
-        error: "Subscription expired/invalid. Please re-subscribe.",
+        message: "Subscription expired/invalid. Please re-subscribe.",
         cleanedUp: true,
       });
     }
 
-    return res.status(status).json({
-      error: "Failed to send push",
+    return res.status(statusCode).json({
+      message: "Failed to send push",
       details: err?.message || String(err),
     });
   }
