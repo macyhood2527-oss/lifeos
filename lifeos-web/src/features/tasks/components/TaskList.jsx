@@ -73,7 +73,7 @@ export default function TaskList({ tasks, onUpdated }) {
       });
 
       await onUpdated?.(taskId);
-      showToast("Details saved", "ok");
+      showToast("Details saved ✨", "ok");
     } catch (e) {
       showToast("Save failed. Please retry.", "warn");
     } finally {
@@ -92,7 +92,7 @@ export default function TaskList({ tasks, onUpdated }) {
           setBusyId(taskId);
           await deleteTask(taskId);
           await onUpdated?.(taskId);
-          showToast("Deleted", "ok");
+          showToast("Deleted 🧺", "ok");
         } catch (e) {
           showToast("Delete failed. Try again.", "warn");
         } finally {
