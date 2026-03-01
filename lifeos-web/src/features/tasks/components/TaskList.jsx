@@ -1,11 +1,11 @@
 // lifeos-web/src/features/tasks/components/TaskList.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { updateTask, deleteTask } from "../tasks.api";
 
 export default function TaskList({ tasks, onUpdated }) {
-  const [busyId, setBusyId] = useState(null);
-  const [openId, setOpenId] = useState(null);
-  const [draftById, setDraftById] = useState({});
+  const [busyId, setBusyId] = useState(null); // string | null
+  const [openId, setOpenId] = useState(null); // string | null
+  const [draftById, setDraftById] = useState({}); // Record<string, Draft>
   const [toast, setToast] = useState(null);
   const [confirm, setConfirm] = useState(null);
 
@@ -24,29 +24,53 @@ export default function TaskList({ tasks, onUpdated }) {
   }
 
   const list = Array.isArray(tasks) ? tasks : [];
-  if (!list.length)
-    return <div className="text-sm text-stone-500">No tasks today.</div>;
 
-  function ensureDraft(t) {
-    return (
-      draftById[t.id] ?? {
-        due_date: t.due_date ?? "",
-        priority: t.priority ?? "medium",
-        notes: t.notes ?? "",
-      }
-    );
+  // Map for quick lookup (also helps draft init)
+  const taskById = useMemo(() => {
+    const m = new Map();
+    for (const t of list) m.set(String(t.id), t);
+    return m;
+  }, [list]);
+
+  if (!list.length) {
+    return <div className="text-sm text-stone-500">No tasks today.</div>;
   }
 
-  function setDraft(taskId, patch) {
+  function ensureDraftFromTask(t) {
+    return {
+      due_date: t?.due_date ?? "",
+      priority: t?.priority ?? "medium",
+      notes: t?.notes ?? "",
+    };
+  }
+
+  function getDraft(tid) {
+    return draftById[tid] ?? ensureDraftFromTask(taskById.get(tid));
+  }
+
+  function setDraft(tid, patch) {
     setDraftById((prev) => ({
       ...prev,
-      [taskId]: { ...(prev[taskId] ?? ensureDraft({ id: taskId })), ...patch },
+      [tid]: { ...getDraft(tid), ...patch },
     }));
   }
 
+  function toggleDetails(t) {
+    const tid = String(t.id);
+
+    // init draft the first time you open (so inputs are editable immediately)
+    setDraftById((prev) => {
+      if (prev[tid]) return prev;
+      return { ...prev, [tid]: ensureDraftFromTask(t) };
+    });
+
+    setOpenId((curr) => (curr === tid ? null : tid));
+  }
+
   async function setStatus(taskId, status) {
+    const tid = String(taskId);
     try {
-      setBusyId(taskId);
+      setBusyId(tid);
       await updateTask(taskId, { status });
       await onUpdated?.();
       showToast(status === "done" ? "Marked done ✨" : "Back to todo 🌿");
@@ -58,8 +82,9 @@ export default function TaskList({ tasks, onUpdated }) {
   }
 
   async function saveDetails(taskId, draft) {
+    const tid = String(taskId);
     try {
-      setBusyId(taskId);
+      setBusyId(tid);
       await updateTask(taskId, {
         due_date: draft.due_date || null,
         priority: draft.priority,
@@ -75,6 +100,7 @@ export default function TaskList({ tasks, onUpdated }) {
   }
 
   async function removeTask(taskId) {
+    const tid = String(taskId);
     setConfirm({
       title: "Delete this task?",
       body: "This can’t be undone.",
@@ -82,7 +108,7 @@ export default function TaskList({ tasks, onUpdated }) {
       tone: "danger",
       onYes: async () => {
         try {
-          setBusyId(taskId);
+          setBusyId(tid);
           await deleteTask(taskId);
           await onUpdated?.();
           showToast("Deleted 🧺");
@@ -140,14 +166,15 @@ export default function TaskList({ tasks, onUpdated }) {
       {/* List */}
       <div className="space-y-2">
         {list.map((t) => {
-          const isBusy = busyId === t.id;
+          const tid = String(t.id);
+          const isBusy = busyId === tid;
           const isDone = t.status === "done";
-          const isOpen = openId === t.id;
-          const draft = ensureDraft(t);
+          const isOpen = openId === tid;
+          const draft = getDraft(tid);
 
           return (
             <div
-              key={t.id}
+              key={tid}
               className="rounded-2xl border border-black/5 bg-white/70 p-3"
             >
               {/* Header */}
@@ -155,9 +182,7 @@ export default function TaskList({ tasks, onUpdated }) {
                 <div>
                   <div
                     className={`text-sm font-medium ${
-                      isDone
-                        ? "line-through text-stone-400"
-                        : "text-stone-900"
+                      isDone ? "line-through text-stone-400" : "text-stone-900"
                     }`}
                   >
                     {t.title}
@@ -169,7 +194,7 @@ export default function TaskList({ tasks, onUpdated }) {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setOpenId(isOpen ? null : t.id)}
+                    onClick={() => toggleDetails(t)}
                     className="rounded-xl border px-3 py-2 text-xs"
                   >
                     {isOpen ? "Hide details" : "Details"}
@@ -177,9 +202,7 @@ export default function TaskList({ tasks, onUpdated }) {
 
                   <button
                     disabled={isBusy}
-                    onClick={() =>
-                      setStatus(t.id, isDone ? "todo" : "done")
-                    }
+                    onClick={() => setStatus(t.id, isDone ? "todo" : "done")}
                     className="rounded-xl border px-3 py-2 text-xs"
                   >
                     {isDone ? "Undo" : "Done"}
@@ -195,23 +218,19 @@ export default function TaskList({ tasks, onUpdated }) {
                 </div>
               </div>
 
-              {/* Details (clean conditional render) */}
+              {/* Details */}
               {isOpen && (
                 <div className="mt-3 rounded-xl border border-black/5 bg-white/60 p-3 space-y-3 transition-all duration-200 ease-out">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <input
                       type="date"
                       value={draft.due_date}
-                      onChange={(e) =>
-                        setDraft(t.id, { due_date: e.target.value })
-                      }
+                      onChange={(e) => setDraft(tid, { due_date: e.target.value })}
                       className="rounded-xl border px-3 py-2 text-xs"
                     />
                     <select
                       value={draft.priority}
-                      onChange={(e) =>
-                        setDraft(t.id, { priority: e.target.value })
-                      }
+                      onChange={(e) => setDraft(tid, { priority: e.target.value })}
                       className="rounded-xl border px-3 py-2 text-xs"
                     >
                       <option value="low">low</option>
@@ -222,9 +241,7 @@ export default function TaskList({ tasks, onUpdated }) {
 
                   <textarea
                     value={draft.notes}
-                    onChange={(e) =>
-                      setDraft(t.id, { notes: e.target.value })
-                    }
+                    onChange={(e) => setDraft(tid, { notes: e.target.value })}
                     rows={3}
                     placeholder="Optional notes…"
                     className="w-full rounded-xl border px-3 py-2 text-xs"
@@ -235,11 +252,7 @@ export default function TaskList({ tasks, onUpdated }) {
                       onClick={() =>
                         setDraftById((prev) => ({
                           ...prev,
-                          [t.id]: {
-                            due_date: t.due_date ?? "",
-                            priority: t.priority ?? "medium",
-                            notes: t.notes ?? "",
-                          },
+                          [tid]: ensureDraftFromTask(taskById.get(tid)),
                         }))
                       }
                       className="rounded-xl border px-3 py-2 text-xs"
