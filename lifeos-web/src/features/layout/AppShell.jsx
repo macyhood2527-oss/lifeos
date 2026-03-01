@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../shared/auth/useAuth";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import bgTile from "../../assets/bg-tile.jpg";
 import lifeosBanner from "../../assets/lifeos-banner.png";
 import InstallAppFloating from "../../shared/ui/InstallAppFloating";
@@ -67,13 +67,18 @@ export default function AppShell() {
 
   useLayoutEffect(() => {
     measureIndicator();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   useEffect(() => {
     const onResize = () => measureIndicator();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ✅ Memo so it doesn't re-create on every route render
+  const installChip = useMemo(() => <InstallAppFloating />, []);
 
   return (
     <div
@@ -85,9 +90,10 @@ export default function AppShell() {
         backgroundPosition: "top left",
         backgroundAttachment: "fixed",
       }}
-
-          <InstallAppFloating />
     >
+      {/* ✅ floating PWA install chip */}
+      {installChip}
+
       {/* Custom animations */}
       <style>{`
         @keyframes fadeUp {
@@ -112,18 +118,15 @@ export default function AppShell() {
 
       <div className="min-h-screen bg-gradient-to-b from-emerald-50/80 via-rose-50/70 to-stone-50/80 backdrop-blur-[1px]">
         <div className="mx-auto max-w-5xl p-4 md:p-6">
-
           {/* ===== HEADER ===== */}
           <div className="relative rounded-3xl border border-black/5 shadow-sm overflow-hidden fade-up">
-
             {/* Glass gradient base */}
             <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-white/40 to-white/85 backdrop-blur-lg" />
 
-            {/* Extra soft overlay fade (top transparent feel) */}
+            {/* Extra soft overlay fade */}
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/20 to-transparent pointer-events-none" />
 
             <header className="relative px-4 pt-4 pb-5">
-
               {/* Logout top right */}
               <div className="flex justify-end">
                 <button
@@ -134,11 +137,13 @@ export default function AppShell() {
                 </button>
               </div>
 
-              {/* Banner full width */}
+              {/* Banner */}
               <div className="mt-2 flex justify-center">
                 <img
                   src={lifeosBanner}
                   alt="LifeOS"
+                  loading="lazy"
+                  decoding="async"
                   className="h-36 md:h-52 w-full object-contain select-none float-soft"
                   draggable="false"
                 />
@@ -159,10 +164,7 @@ export default function AppShell() {
             <div className="rounded-3xl border border-black/5 bg-white/45 backdrop-blur shadow-sm">
               <nav className="px-3 py-2">
                 <div className="overflow-x-auto no-scrollbar scroll-smooth">
-                  <div
-                    ref={navRef}
-                    className="relative flex items-center gap-2 min-w-max py-1"
-                  >
+                  <div ref={navRef} className="relative flex items-center gap-2 min-w-max py-1">
                     {/* Sliding highlight */}
                     <div
                       className="absolute top-1/2 -translate-y-1/2 rounded-2xl border border-black/10 bg-white/80 shadow-sm transition-all duration-300 ease-out"
@@ -195,7 +197,7 @@ export default function AppShell() {
           </div>
 
           {/* ===== MAIN ===== */}
-         <main className="mt-6">
+          <main className="mt-6">
             <Outlet />
           </main>
 
@@ -206,7 +208,6 @@ export default function AppShell() {
               <div className="mt-1">LifeOS. calm progress over pressure.</div>
             </div>
           </footer>
-
         </div>
       </div>
     </div>
