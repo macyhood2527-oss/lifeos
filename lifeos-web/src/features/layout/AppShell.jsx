@@ -3,6 +3,7 @@ import { useAuth } from "../../shared/auth/useAuth";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import bgTile from "../../assets/bg-tile.jpg";
 import lifeosBanner from "../../assets/lifeos-banner.png";
+import InstallAppFloating from "../../shared/ui/InstallAppFloating";
 
 const linkBase =
   "relative shrink-0 rounded-2xl px-3 py-2 text-sm whitespace-nowrap " +
@@ -84,6 +85,8 @@ export default function AppShell() {
         backgroundPosition: "top left",
         backgroundAttachment: "fixed",
       }}
+
+          <InstallAppFloating />
     >
       {/* Custom animations */}
       <style>{`
