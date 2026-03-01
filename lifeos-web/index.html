@@ -12,23 +12,22 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.webmanifest" />
 
-    <!-- Theme color (top bar color in installed mode) -->
+    <!-- PWA + Mobile Support -->
     <meta name="theme-color" content="#a7f3d0" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- iOS Safari -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="LifeOS" />
 
     <!-- Icons -->
     <link rel="icon" type="image/png" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-
-    <!-- iOS PWA support -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="LifeOS" />
   </head>
 
   <body>
     <div id="root"></div>
-
-    <!-- Vite entry -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
