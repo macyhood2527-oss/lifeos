@@ -93,15 +93,14 @@ export default function PrivacyPage() {
         <Section title="Contact">
           <p>
             Questions or requests? Email:{" "}
-            <span className="font-medium text-stone-800">your-email@example.com</span>
+            <span className="font-medium text-stone-800">mmarcelo.maxwell@gmail.com</span>
           </p>
         </Section>
       </div>
 
       {/* Footer note */}
       <div className="rounded-3xl border border-black/5 bg-white/40 backdrop-blur px-5 py-4 text-xs text-stone-500">
-        Tip: If you add new features (push notifications, sharing, payments), update this
-        policy to match.
+        LifeOS is built with calm progress in mind. Thank you for using it gently 🌷
       </div>
     </div>
   );
