@@ -157,7 +157,7 @@ export default function TodayPage() {
         {/* IMPORTANT: Card already has a panel.
             If you want a SINGLE panel look, we should make Card “flat”.
             For now: keep it, but it will look slightly nested. */}
-        <Card />
+    
       </GlassPanel>
 
       {/* 🌱 Habits */}
