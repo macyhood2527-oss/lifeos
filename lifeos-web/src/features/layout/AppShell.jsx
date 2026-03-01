@@ -202,12 +202,35 @@ export default function AppShell() {
           </main>
 
           {/* ===== FOOTER ===== */}
-          <footer className="mt-6 text-center text-xs text-stone-500">
-            <div className="rounded-3xl border border-black/5 bg-white/40 px-4 py-4 backdrop-blur">
-              <div>✨ Built gently by Melissa Marcelo 🌸</div>
-              <div className="mt-1">LifeOS. calm progress over pressure.</div>
-            </div>
-          </footer>
+        {/* ===== FOOTER ===== */}
+<footer className="mt-6 text-center text-xs text-stone-500">
+  <div className="rounded-3xl border border-black/5 bg-white/40 px-4 py-5 backdrop-blur">
+    <div>✨ Built gently by Melissa Marcelo 🌸</div>
+    <div className="mt-1">LifeOS. calm progress over pressure.</div>
+
+    {/* Divider */}
+    <div className="my-3 h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+
+    {/* Links */}
+    <div className="flex justify-center items-center gap-3 text-[11px]">
+      <NavLink
+        to="/privacy"
+        className="underline decoration-black/20 hover:decoration-black/40 hover:text-stone-700 transition"
+      >
+        Privacy
+      </NavLink>
+
+      <span className="text-stone-400">•</span>
+
+      <NavLink
+        to="/terms"
+        className="underline decoration-black/20 hover:decoration-black/40 hover:text-stone-700 transition"
+      >
+        Terms
+      </NavLink>
+    </div>
+  </div>
+</footer>
         </div>
       </div>
     </div>
