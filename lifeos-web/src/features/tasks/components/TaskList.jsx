@@ -41,10 +41,11 @@ export default function TaskList({ tasks, onUpdated }) {
     );
   }
 
-  function setDraft(taskId, patch) {
+  // ✅ FIX: accept the real task object so defaults don’t become blank
+  function setDraft(task, patch) {
     setDraftById((prev) => ({
       ...prev,
-      [taskId]: { ...(prev[taskId] ?? ensureDraft({ id: taskId })), ...patch },
+      [task.id]: { ...ensureDraft(task), ...patch },
     }));
   }
 
@@ -53,7 +54,6 @@ export default function TaskList({ tasks, onUpdated }) {
       setBusyId(taskId);
       await updateTask(taskId, { status });
       await onUpdated?.(taskId);
-
       showToast(status === "done" ? "Marked done 🌿" : "Back to todo", "ok");
     } catch (e) {
       showToast("Couldn’t update. Try again.", "warn");
@@ -121,7 +121,7 @@ export default function TaskList({ tasks, onUpdated }) {
         </div>
       ) : null}
 
-      {/* Confirm Modal (NO backdrop panel) */}
+      {/* Confirm Modal */}
       {confirm ? (
         <div className="fixed inset-0 z-50 grid place-items-center p-4 pointer-events-none">
           <div className="pointer-events-auto w-full max-w-sm rounded-3xl border border-black/10 bg-white/95 p-4 shadow-xl backdrop-blur">
@@ -213,9 +213,55 @@ export default function TaskList({ tasks, onUpdated }) {
                 </div>
               </div>
 
+              {/* ✅ DETAILS PANEL (this is what was missing) */}
               {isOpen && (
-                <div className="mt-3 rounded-xl border border-black/5 bg-white/60 p-3 space-y-3">
-                  {/* details unchanged */}
+                <div className="mt-3 rounded-2xl border border-black/5 bg-white/60 p-3 space-y-3">
+                  <div className="grid gap-2 sm:grid-cols-12">
+                    <div className="sm:col-span-4">
+                      <div className="text-[11px] text-stone-500 mb-1">Due date</div>
+                      <input
+                        type="date"
+                        value={draft.due_date ? String(draft.due_date).slice(0, 10) : ""}
+                        onChange={(e) => setDraft(t, { due_date: e.target.value })}
+                        className="w-full rounded-2xl border border-black/10 bg-white/80 px-3 py-2 text-sm outline-none focus:bg-white"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-4">
+                      <div className="text-[11px] text-stone-500 mb-1">Priority</div>
+                      <select
+                        value={draft.priority ?? "medium"}
+                        onChange={(e) => setDraft(t, { priority: e.target.value })}
+                        className="w-full rounded-2xl border border-black/10 bg-white/80 px-3 py-2 text-sm"
+                      >
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-4 flex items-end justify-end">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => saveDetails(t.id, ensureDraft(t))}
+                        className="w-full sm:w-auto rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100 disabled:opacity-60"
+                      >
+                        {isBusy ? "Saving…" : "Save details"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] text-stone-500 mb-1">Notes</div>
+                    <textarea
+                      rows={3}
+                      value={draft.notes ?? ""}
+                      onChange={(e) => setDraft(t, { notes: e.target.value })}
+                      placeholder="Optional notes…"
+                      className="w-full rounded-2xl border border-black/10 bg-white/80 px-3 py-2 text-sm outline-none focus:bg-white"
+                    />
+                  </div>
                 </div>
               )}
             </div>
