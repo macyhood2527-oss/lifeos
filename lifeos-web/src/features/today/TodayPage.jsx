@@ -3,7 +3,7 @@ import HabitList from "../habits/components/HabitList";
 import TaskComposer from "../tasks/components/TaskComposer";
 import TaskList from "../tasks/components/TaskList";
 import ReflectionComposer from "../reflections/components/ReflectionComposer";
-import NotificationsCard from "../notifications/NotificationsCard";
+import Card from "..//Card";
 
 import {
   getWeeklyAnalytics,
@@ -149,15 +149,15 @@ export default function TodayPage() {
         )}
       </GlassPanel>
 
-      {/* 🔔 Notifications (own glass panel) */}
+      {/* 🔔  (own glass panel) */}
       <GlassPanel
-        title="Notifications"
-        subtitle="Gentle reminders — respectful of your timezone and quiet hours."
+        title="Soft Signals"
+        subtitle="Personalize how LifeOS checks in with you."
       >
-        {/* IMPORTANT: NotificationsCard already has a panel.
-            If you want a SINGLE panel look, we should make NotificationsCard “flat”.
+        {/* IMPORTANT: Card already has a panel.
+            If you want a SINGLE panel look, we should make Card “flat”.
             For now: keep it, but it will look slightly nested. */}
-        <NotificationsCard />
+        <Card />
       </GlassPanel>
 
       {/* 🌱 Habits */}
