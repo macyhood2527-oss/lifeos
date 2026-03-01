@@ -241,13 +241,9 @@ export default function TaskList({ tasks, onUpdated }) {
               </div>
 
               {/* Details panel (animated) */}
-              <div
-                className={[
-                  "overflow-hidden transition-[max-height,opacity,transform] duration-200 ease-out",
-                  isOpen ? "max-h-[520px] opacity-100 translate-y-0" : "max-h-0 opacity-0 -translate-y-1",
-                ].join(" ")}
-                aria-hidden={!isOpen}
-              >
+             {isOpen ? (
+  <div className="mt-3 rounded-xl border border-black/5 bg-white/60 p-3 space-y-3 transition-all duration-200 ease-out opacity-100 translate-y-0">
+    
                 <div className="mt-3 rounded-xl border border-black/5 bg-white/60 p-3 space-y-3">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <label className="space-y-1">
