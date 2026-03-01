@@ -85,13 +85,13 @@ export default function TermsPage() {
         <Section title="Contact">
           <p>
             Questions? Email:{" "}
-            <span className="font-medium text-stone-800">your-email@example.com</span>
+            <span className="font-medium text-stone-800">mmarcelo.maxwell@gmail.com</span>
           </p>
         </Section>
       </div>
 
       <div className="rounded-3xl border border-black/5 bg-white/40 backdrop-blur px-5 py-4 text-xs text-stone-500">
-        LifeOS is built with calm progress in mind — thank you for using it gently 🌷
+         LifeOS is built with calm progress in mind. Thank you for using it gently 🌷
       </div>
     </div>
   );
