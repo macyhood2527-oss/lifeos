@@ -22,8 +22,8 @@ export default function AppShell() {
   const location = useLocation();
 
   const greeting = user?.name
-    ? `Hi, ${user.name} 🌷 small wins, gently.`
-    : "Hi 🌷 small wins, gently.";
+    ? `Hi, ${user.name} 🌷 How are you today?`
+    : "Hi 🌷 How are you today?";
 
   // ----- Tab indicator -----
   const navRef = useRef(null);
@@ -203,7 +203,7 @@ export default function AppShell() {
           <footer className="mt-6 text-center text-xs text-stone-500">
             <div className="rounded-3xl border border-black/5 bg-white/40 px-4 py-4 backdrop-blur">
               <div>✨ Built gently by Melissa Marcelo 🌸</div>
-              <div className="mt-1">LifeOS — calm progress over pressure.</div>
+              <div className="mt-1">LifeOS. calm progress over pressure.</div>
             </div>
           </footer>
 
