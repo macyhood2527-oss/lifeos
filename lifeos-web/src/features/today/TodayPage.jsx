@@ -4,7 +4,7 @@ import TaskComposer from "../tasks/components/TaskComposer";
 import TaskList from "../tasks/components/TaskList";
 import ReflectionComposer from "../reflections/components/ReflectionComposer";
 import NotificationsCard from "../notifications/NotificationsCard";
-import Loader from "../../shared/ui/loader";
+
 
 import {
   getWeeklyAnalytics,
@@ -122,7 +122,7 @@ export default function TodayPage() {
   }, [tasks]);
 
   // ✅ Replace plain text loader with your branded loader
-  if (loading) return <Loader small />;
+
 
   return (
     <div className="space-y-8">
