@@ -2,16 +2,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { upsertReflection } from "../reflections.api";
 
-function toMs(dateLike) {
-  if (!dateLike) return null;
-  const ms = new Date(dateLike).getTime();
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function formatTime(dateLike) {
-  if (!dateLike) return null;
+function formatTime(date) {
+  if (!date) return null;
   try {
-    const d = new Date(dateLike);
+    const d = new Date(date);
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     return null;
@@ -32,9 +26,7 @@ export default function ReflectionComposer({ initial, onSaved }) {
 
   const [toast, setToast] = useState(null);
 
-  // Track last saved time as BOTH display string + comparable ms timestamp
-  const initialMs = toMs(initial?.updated_at);
-  const [lastSavedMs, setLastSavedMs] = useState(initialMs);
+  // ✅ Only initialize from initial once, but DO NOT keep overwriting later.
   const [lastSavedAt, setLastSavedAt] = useState(
     initial?.updated_at ? formatTime(initial.updated_at) : null
   );
@@ -60,21 +52,14 @@ export default function ReflectionComposer({ initial, onSaved }) {
     return hasMood || hasText;
   }, [initial]);
 
-  // When initial changes, update fields — but only update the “Last saved”
-  // timestamp if the incoming updated_at is NEWER than what we already have.
+  // ✅ When initial changes (e.g., after reload), update the form fields,
+  // BUT do NOT overwrite lastSavedAt (so it stays “now” after saving).
   useEffect(() => {
     setMood(initial?.mood ?? 7);
     setGratitude(initial?.gratitude ?? "");
     setHighlights(initial?.highlights ?? "");
     setChallenges(initial?.challenges ?? "");
     setNotes(initial?.notes ?? "");
-
-    const incomingMs = toMs(initial?.updated_at);
-    if (incomingMs && (!lastSavedMs || incomingMs > lastSavedMs)) {
-      setLastSavedMs(incomingMs);
-      setLastSavedAt(formatTime(initial.updated_at));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
   async function save() {
@@ -82,29 +67,21 @@ export default function ReflectionComposer({ initial, onSaved }) {
     try {
       setBusy(true);
 
-      const payload = {
+      await upsertReflection({
         mood,
         gratitude: gratitude.trim() ? gratitude.trim() : null,
         highlights: highlights.trim() ? highlights.trim() : null,
         challenges: challenges.trim() ? challenges.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
-      };
+      });
 
-      // If your API returns the saved reflection row, we’ll use its updated_at.
-      const res = await upsertReflection(payload);
-
-      const stamp = res?.updated_at ?? new Date().toISOString();
-      const stampMs = toMs(stamp);
-
-      if (stampMs) setLastSavedMs(stampMs);
-      setLastSavedAt(formatTime(stamp));
+      // ✅ Always show the time NOW (moment user clicked Save)
+      setLastSavedAt(formatTime(new Date()));
 
       setSaved(true);
       setTimeout(() => setSaved(false), 1200);
 
       showToast("Reflection saved", "ok");
-
-      // Trigger parent refresh AFTER setting our local timestamp
       await onSaved?.();
     } catch (err) {
       console.error(err);
