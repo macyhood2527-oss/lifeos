@@ -6,8 +6,6 @@ import ReflectionComposer from "../reflections/components/ReflectionComposer";
 import NotificationsCard from "../notifications/NotificationsCard";
 import Loader from "../../shared/ui/Loader";
 
-return <Loader small />;
-
 import {
   getWeeklyAnalytics,
   getTodayTasks,
@@ -77,7 +75,8 @@ export default function TodayPage() {
       setHabitsError("Habits couldn't load right now.");
     }
 
-    if (results[2].status === "fulfilled") setReflection(results[2].value ?? null);
+    if (results[2].status === "fulfilled")
+      setReflection(results[2].value ?? null);
     else {
       console.error("getTodayReflection failed:", results[2].reason);
       setReflection(null);
@@ -122,10 +121,10 @@ export default function TodayPage() {
       .slice(0, 5);
   }, [tasks]);
 
-  if (loading) return <div className="text-stone-500">Loading gently...</div>;
+  // ✅ Replace plain text loader with your branded loader
+  if (loading) return <Loader small />;
 
   return (
-    // ✅ true separate panels with generous spacing
     <div className="space-y-8">
       {/* 🌿 Today Summary */}
       <GlassPanel
@@ -152,16 +151,12 @@ export default function TodayPage() {
         )}
       </GlassPanel>
 
-      {/* 🔔  (own glass panel) */}
+      {/* 🔔 Soft Signals */}
       <GlassPanel
         title="Soft Signals"
         subtitle="Personalize how LifeOS checks in with you."
       >
-        {/* IMPORTANT: Card already has a panel.
-            If you want a SINGLE panel look, we should make Card “flat”.
-            For now: keep it, but it will look slightly nested. */}
-                <NotificationsCard />
-    
+        <NotificationsCard />
       </GlassPanel>
 
       {/* 🌱 Habits */}
@@ -217,7 +212,10 @@ export default function TodayPage() {
       </GlassPanel>
 
       {/* 🌸 Reflection */}
-      <GlassPanel title="Reflection" subtitle="A gentle note for your future self.">
+      <GlassPanel
+        title="Reflection"
+        subtitle="A gentle note for your future self."
+      >
         {reflectionError && (
           <div className="mb-3 rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
             {reflectionError}
