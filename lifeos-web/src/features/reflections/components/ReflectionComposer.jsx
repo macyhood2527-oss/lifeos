@@ -2,16 +2,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { upsertReflection } from "../reflections.api";
 
-// Parse MySQL DATETIME "YYYY-MM-DD HH:mm:ss" as LOCAL time (no timezone conversion)
-function parseMySqlDateTimeLocal(value) {
+/**
+ * Your API returns MySQL DATETIME strings like:
+ * "2026-03-02 13:39:03.758"
+ *
+ * That value has NO timezone. From the 8-hour gap you described,
+ * it’s effectively UTC time. So we parse it as UTC and then display
+ * it in the user's LOCAL timezone (browser/device).
+ */
+function parseMySqlDateTimeAsUTC(value) {
   if (!value) return null;
   if (value instanceof Date) return value;
 
   const s = String(value).trim();
 
-  // Matches: 2026-03-02 13:24:29
+  // Matches:
+  // 2026-03-02 13:39:03
+  // 2026-03-02 13:39:03.758
   const m = s.match(
-    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/
   );
   if (!m) return null;
 
@@ -20,38 +29,26 @@ function parseMySqlDateTimeLocal(value) {
   const day = Number(m[3]);
   const hour = Number(m[4]);
   const minute = Number(m[5]);
-  const second = m[6] ? Number(m[6]) : 0;
+  const second = Number(m[6]);
 
-  // IMPORTANT: This creates a Date in the user's LOCAL timezone.
-  return new Date(year, month - 1, day, hour, minute, second);
+  // normalize ms to 3 digits (".7" -> 700, ".75" -> 750, ".758" -> 758)
+  const msRaw = m[7];
+  const ms = msRaw ? Number(msRaw.padEnd(3, "0")) : 0;
+
+  // IMPORTANT: Create Date from UTC parts
+  return new Date(Date.UTC(year, month - 1, day, hour, minute, second, ms));
 }
 
 function formatTime(value) {
-  if (!value) return null;
+  const d = parseMySqlDateTimeAsUTC(value) ?? (value instanceof Date ? value : new Date(value));
+  if (!d || Number.isNaN(d.getTime())) return null;
 
-  // 1) If it's a MySQL DATETIME string, treat as LOCAL time.
-  const localFromMysql = parseMySqlDateTimeLocal(value);
-  if (localFromMysql) {
-    return new Intl.DateTimeFormat("en-PH", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }).format(localFromMysql);
-  }
-
-  // 2) Otherwise, let JS parse it normally (ISO strings, Date objects, etc.)
-  try {
-    const d = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(d.getTime())) return null;
-
-    return new Intl.DateTimeFormat("en-PH", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }).format(d);
-  } catch {
-    return null;
-  }
+  // No timeZone specified => uses the user's device/browser timezone automatically
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
 }
 
 export default function ReflectionComposer({ initial, onSaved }) {
@@ -106,7 +103,7 @@ export default function ReflectionComposer({ initial, onSaved }) {
     try {
       setBusy(true);
 
-      // IMPORTANT: use the server response so the time matches DB
+      // Use server response so timestamp matches DB (best practice)
       const savedReflection = await upsertReflection({
         mood,
         gratitude: gratitude.trim() ? gratitude.trim() : null,
@@ -115,7 +112,6 @@ export default function ReflectionComposer({ initial, onSaved }) {
         notes: notes.trim() ? notes.trim() : null,
       });
 
-      // If server returns updated_at, use it (best)
       const serverUpdatedAt = savedReflection?.updated_at;
       setLastSavedAt(serverUpdatedAt ? formatTime(serverUpdatedAt) : formatTime(new Date()));
 
