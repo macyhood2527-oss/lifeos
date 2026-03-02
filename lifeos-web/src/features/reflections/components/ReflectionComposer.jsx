@@ -2,61 +2,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { upsertReflection } from "../reflections.api";
 
-// Parses backend date strings safely without touching backend.
-// Supports:
-// - "YYYY-MM-DD HH:mm:ss" (common MySQL output; no timezone info)
-// - ISO strings like "2026-03-02T05:14:04.000Z"
-// - Date objects
-function parseBackendDate(input) {
-  if (!input) return null;
-
-  // Already a Date
-  if (input instanceof Date) {
-    return Number.isFinite(input.getTime()) ? input : null;
-  }
-
-  const s = String(input).trim();
-  if (!s) return null;
-
-  // MySQL style: "YYYY-MM-DD HH:mm:ss"
-  // Interpret as LOCAL time (user’s device), not UTC.
-  // This makes "13:14:04" mean 1:14 PM in the user's timezone.
-  const mysql = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/;
-  const m = s.match(mysql);
-  if (m) {
-    const yy = Number(m[1]);
-    const mo = Number(m[2]); // 1-12
-    const dd = Number(m[3]);
-    const hh = Number(m[4]);
-    const mm = Number(m[5]);
-    const ss = Number(m[6] ?? 0);
-
-    // Construct as local time on the device:
-    const d = new Date(yy, mo - 1, dd, hh, mm, ss);
-    return Number.isFinite(d.getTime()) ? d : null;
-  }
-
-  // ISO or other parseable formats
-  const d = new Date(s);
-  return Number.isFinite(d.getTime()) ? d : null;
-}
-
-function formatTime(dateLike) {
-  const d = parseBackendDate(dateLike);
-  if (!d) return null;
-
-  // Detect per-user timezone automatically (Asia/Manila, America/New_York, etc.)
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
+function formatTime(date) {
+  if (!date) return null;
   try {
-    return d.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: tz,
-    });
-  } catch {
-    // Fallback if timeZone option isn't supported (rare)
+    const d = new Date(date);
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return null;
   }
 }
 
@@ -73,8 +25,6 @@ export default function ReflectionComposer({ initial, onSaved }) {
   const [error, setError] = useState(null);
 
   const [toast, setToast] = useState(null);
-
-  // ✅ Initialize once from initial, don't overwrite on reload
   const [lastSavedAt, setLastSavedAt] = useState(
     initial?.updated_at ? formatTime(initial.updated_at) : null
   );
@@ -100,13 +50,13 @@ export default function ReflectionComposer({ initial, onSaved }) {
     return hasMood || hasText;
   }, [initial]);
 
-  // ✅ Update form fields when initial changes, but don't overwrite lastSavedAt
   useEffect(() => {
     setMood(initial?.mood ?? 7);
     setGratitude(initial?.gratitude ?? "");
     setHighlights(initial?.highlights ?? "");
     setChallenges(initial?.challenges ?? "");
     setNotes(initial?.notes ?? "");
+    setLastSavedAt(initial?.updated_at ? formatTime(initial.updated_at) : null);
   }, [initial]);
 
   async function save() {
@@ -122,8 +72,8 @@ export default function ReflectionComposer({ initial, onSaved }) {
         notes: notes.trim() ? notes.trim() : null,
       });
 
-      // ✅ Always show the time NOW (local user time)
-      setLastSavedAt(formatTime(new Date()));
+      const now = new Date();
+      setLastSavedAt(formatTime(now));
 
       setSaved(true);
       setTimeout(() => setSaved(false), 1200);
