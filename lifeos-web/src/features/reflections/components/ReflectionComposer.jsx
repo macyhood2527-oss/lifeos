@@ -2,15 +2,46 @@
 import { useEffect, useMemo, useState } from "react";
 import { upsertReflection } from "../reflections.api";
 
-function formatTime(date) {
-  if (!date) return null;
-  try {
-    const d = new Date(date);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return null;
+/* -------------------------------
+   Timezone-safe formatter
+-------------------------------- */
+
+function toDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+
+  let s = String(value).trim();
+
+  // Convert MySQL format "YYYY-MM-DD HH:mm:ss"
+  // -> "YYYY-MM-DDTHH:mm:ss"
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) {
+    s = s.replace(" ", "T");
   }
+
+  // If no timezone info, assume UTC
+  const hasTZ = /([zZ]|[+-]\d{2}:?\d{2})$/.test(s);
+  if (!hasTZ) s += "Z";
+
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
 }
+
+function formatTime(value) {
+  const d = toDate(value);
+  if (!d) return null;
+
+  return new Intl.DateTimeFormat("en-PH", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Manila",
+  }).format(d);
+}
+
+/* -------------------------------
+   Component
+-------------------------------- */
 
 export default function ReflectionComposer({ initial, onSaved }) {
   const [mood, setMood] = useState(initial?.mood ?? 7);
@@ -94,7 +125,6 @@ export default function ReflectionComposer({ initial, onSaved }) {
 
   return (
     <div className="relative rounded-2xl border border-black/5 bg-white/70 p-4 space-y-4">
-      {/* Toast */}
       {toast ? (
         <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2">
           <div
@@ -111,22 +141,18 @@ export default function ReflectionComposer({ initial, onSaved }) {
         </div>
       ) : null}
 
-      {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="text-sm font-medium text-stone-900">Mood</div>
-
           {isLogged ? (
             <span className="text-[11px] rounded-xl border border-emerald-200 bg-emerald-50/70 px-2 py-0.5 text-emerald-900">
               logged
             </span>
           ) : null}
         </div>
-
         <div className="text-sm text-stone-700">{mood}/10</div>
       </div>
 
-      {/* Pastel slider */}
       <input
         type="range"
         min="1"
@@ -147,7 +173,6 @@ export default function ReflectionComposer({ initial, onSaved }) {
         }}
       />
 
-      {/* Prompts */}
       <div className="grid gap-3">
         <textarea
           value={gratitude}
