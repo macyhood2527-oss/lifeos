@@ -4,6 +4,9 @@ import TaskComposer from "../tasks/components/TaskComposer";
 import TaskList from "../tasks/components/TaskList";
 import ReflectionComposer from "../reflections/components/ReflectionComposer";
 import NotificationsCard from "../notifications/NotificationsCard";
+import Loader from "../../shared/ui/Loader";
+
+return <Loader small />;
 
 import {
   getWeeklyAnalytics,
