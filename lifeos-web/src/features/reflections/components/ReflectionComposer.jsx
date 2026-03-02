@@ -2,46 +2,57 @@
 import { useEffect, useMemo, useState } from "react";
 import { upsertReflection } from "../reflections.api";
 
-/* -------------------------------
-   Timezone-safe formatter
--------------------------------- */
-
-function toDate(value) {
+// Parse MySQL DATETIME "YYYY-MM-DD HH:mm:ss" as LOCAL time (no timezone conversion)
+function parseMySqlDateTimeLocal(value) {
   if (!value) return null;
   if (value instanceof Date) return value;
 
-  let s = String(value).trim();
+  const s = String(value).trim();
 
-  // Convert MySQL format "YYYY-MM-DD HH:mm:ss"
-  // -> "YYYY-MM-DDTHH:mm:ss"
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) {
-    s = s.replace(" ", "T");
-  }
+  // Matches: 2026-03-02 13:24:29
+  const m = s.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
+  );
+  if (!m) return null;
 
-  // If no timezone info, assume UTC
-  const hasTZ = /([zZ]|[+-]\d{2}:?\d{2})$/.test(s);
-  if (!hasTZ) s += "Z";
+  const year = Number(m[1]);
+  const month = Number(m[2]); // 1-12
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const second = m[6] ? Number(m[6]) : 0;
 
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
+  // IMPORTANT: This creates a Date in the user's LOCAL timezone.
+  return new Date(year, month - 1, day, hour, minute, second);
 }
 
 function formatTime(value) {
-  const d = toDate(value);
-  if (!d) return null;
+  if (!value) return null;
 
-  return new Intl.DateTimeFormat("en-PH", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "Asia/Manila",
-  }).format(d);
+  // 1) If it's a MySQL DATETIME string, treat as LOCAL time.
+  const localFromMysql = parseMySqlDateTimeLocal(value);
+  if (localFromMysql) {
+    return new Intl.DateTimeFormat("en-PH", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(localFromMysql);
+  }
+
+  // 2) Otherwise, let JS parse it normally (ISO strings, Date objects, etc.)
+  try {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+
+    return new Intl.DateTimeFormat("en-PH", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+  } catch {
+    return null;
+  }
 }
-
-/* -------------------------------
-   Component
--------------------------------- */
 
 export default function ReflectionComposer({ initial, onSaved }) {
   const [mood, setMood] = useState(initial?.mood ?? 7);
@@ -95,7 +106,8 @@ export default function ReflectionComposer({ initial, onSaved }) {
     try {
       setBusy(true);
 
-      await upsertReflection({
+      // IMPORTANT: use the server response so the time matches DB
+      const savedReflection = await upsertReflection({
         mood,
         gratitude: gratitude.trim() ? gratitude.trim() : null,
         highlights: highlights.trim() ? highlights.trim() : null,
@@ -103,8 +115,9 @@ export default function ReflectionComposer({ initial, onSaved }) {
         notes: notes.trim() ? notes.trim() : null,
       });
 
-      const now = new Date();
-      setLastSavedAt(formatTime(now));
+      // If server returns updated_at, use it (best)
+      const serverUpdatedAt = savedReflection?.updated_at;
+      setLastSavedAt(serverUpdatedAt ? formatTime(serverUpdatedAt) : formatTime(new Date()));
 
       setSaved(true);
       setTimeout(() => setSaved(false), 1200);
@@ -125,6 +138,7 @@ export default function ReflectionComposer({ initial, onSaved }) {
 
   return (
     <div className="relative rounded-2xl border border-black/5 bg-white/70 p-4 space-y-4">
+      {/* Toast */}
       {toast ? (
         <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2">
           <div
@@ -141,18 +155,22 @@ export default function ReflectionComposer({ initial, onSaved }) {
         </div>
       ) : null}
 
+      {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="text-sm font-medium text-stone-900">Mood</div>
+
           {isLogged ? (
             <span className="text-[11px] rounded-xl border border-emerald-200 bg-emerald-50/70 px-2 py-0.5 text-emerald-900">
               logged
             </span>
           ) : null}
         </div>
+
         <div className="text-sm text-stone-700">{mood}/10</div>
       </div>
 
+      {/* Slider */}
       <input
         type="range"
         min="1"
@@ -173,6 +191,7 @@ export default function ReflectionComposer({ initial, onSaved }) {
         }}
       />
 
+      {/* Prompts */}
       <div className="grid gap-3">
         <textarea
           value={gratitude}
