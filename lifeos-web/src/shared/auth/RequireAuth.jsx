@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
-import Loader from "../shared/ui/Loader"; // adjust path if needed
+import Loader from "../shared/ui/loader"; // adjust path if needed
 
 export default function RequireAuth({ children }) {
   const { user, booting } = useAuth();
