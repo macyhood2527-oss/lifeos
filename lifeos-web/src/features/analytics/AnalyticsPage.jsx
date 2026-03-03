@@ -411,7 +411,7 @@ export default function AnalyticsPage() {
               <div className="text-[11px] text-stone-500">Mon → Sun</div>
             </div>
 
-            <div className="mt-3 h-40 rounded-2xl border border-black/5 bg-white/55 p-2">
+            <div className="mt-3 h-40 rounded-2xl border border-black/5 bg-white/35 p-2">
               {moodSeries.every((d) => d.mood == null) ? (
                 <div className="h-full flex items-center justify-center text-sm text-stone-500">
                   No mood logs yet — add one in Reflections 🌿
@@ -429,9 +429,10 @@ export default function AnalyticsPage() {
 
                       {/* soft area fill */}
                       <linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.26" />
-                        <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.03" />
-                      </linearGradient>
+  <stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.38" />
+  <stop offset="55%" stopColor="#FBCFE8" stopOpacity="0.18" />
+  <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.06" />
+</linearGradient>
                     </defs>
 
                     {/* minimal horizontal grid like the reference */}
@@ -444,13 +445,14 @@ export default function AnalyticsPage() {
 
                     {/* area */}
                     <Area
-                      type="monotone"
-                      dataKey="mood"
-                      stroke="none"
-                      fill="url(#moodFill)"
-                      connectNulls={false}
-                      isAnimationActive={true}
-                    />
+  type="monotone"
+  dataKey="mood"
+  stroke="none"
+  fill="url(#moodFill)"
+  fillOpacity={1}
+  connectNulls={false}
+  baseValue={1}
+/>
 
                     {/* gradient line + hollow dots */}
                     <Line
