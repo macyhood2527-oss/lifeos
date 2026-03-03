@@ -5,7 +5,6 @@ import TaskList from "../tasks/components/TaskList";
 import ReflectionComposer from "../reflections/components/ReflectionComposer";
 import NotificationsCard from "../notifications/NotificationsCard";
 
-
 import {
   getWeeklyAnalytics,
   getTodayTasks,
@@ -33,6 +32,24 @@ function GlassPanel({ title, subtitle, children, rightSlot }) {
       <div className="p-5">{children}</div>
     </section>
   );
+}
+
+function pickDailyMessage(messages, seedKey) {
+  if (!messages?.length) return null;
+  // stable daily pick (doesn't change on every refresh)
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const seed = `${seedKey ?? "lifeos"}-${y}-${m}-${day}`;
+
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const idx = Math.abs(h) % messages.length;
+  return messages[idx];
 }
 
 export default function TodayPage() {
@@ -121,8 +138,58 @@ export default function TodayPage() {
       .slice(0, 5);
   }, [tasks]);
 
-  // ✅ Replace plain text loader with your branded loader
+  const fallbackMessages = useMemo(
+    () => [
+      // anchor (your original line)
+      "One small step is enough today.",
 
+      // gentle permission
+      "You don’t have to carry everything today.",
+      "It’s okay to move slowly. You’re still moving.",
+      "Not everything needs to be solved right now.",
+      "A calm pace still counts.",
+      "If it feels heavy, shrink the goal.",
+      "You’re allowed to take this gently.",
+      "Soft progress is still progress.",
+
+      // companion-like
+      "Let’s keep it simple today — one small step.",
+      "We’ll do one thing, then we rest.",
+      "I’m here — pick the easiest next step.",
+      "No pressure. Just one gentle win.",
+      "We can start tiny and still be proud.",
+
+      // motivational (soft, non-hustle)
+      "Start where you are. One step is enough.",
+      "Momentum comes from small starts.",
+      "Choose one task that makes the day lighter.",
+      "A little consistency beats a big burst.",
+      "One finished thing can change your whole day.",
+
+      // extra variety (still calm)
+      "Today doesn’t need to be perfect to be meaningful.",
+      "You’re not behind — you’re building your pace.",
+      "Take a breath. Then take one step.",
+      "Quiet days still count as progress.",
+      "Small wins add up, gently.",
+    ],
+    []
+  );
+
+  const dailyMessage = useMemo(() => {
+    // Seed can include counts so it feels “slightly aware” but stays stable per day.
+    const seedKey = `today-${tasks.length}-${habits.length}`;
+    return pickDailyMessage(fallbackMessages, seedKey);
+  }, [fallbackMessages, tasks.length, habits.length]);
+
+  // ✅ Replace plain text loader with your branded loader
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-black/5 bg-white/55 p-5 text-sm text-stone-600 shadow-sm backdrop-blur-md">
+        Loading gently…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -146,7 +213,7 @@ export default function TodayPage() {
           </div>
         ) : (
           <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
-            One small step is enough today.
+            {dailyMessage || "One small step is enough today."}
           </div>
         )}
       </GlassPanel>
