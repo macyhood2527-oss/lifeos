@@ -16,8 +16,7 @@ import {
   YAxis,
   Tooltip,
   Area,
-  ReferenceDot,
-  CartesianGrid, // ✅ added
+  CartesianGrid,
 } from "recharts";
 
 // Pastel palette (soft, varied)
@@ -83,6 +82,245 @@ function buildMoodInsight(series) {
 }
 
 /* =========================
+   Seeded rotation helpers
+========================= */
+function hashStringToInt(str) {
+  let h = 2166136261;
+  for (let i = 0; i < String(str || "").length; i++) {
+    h ^= String(str).charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function makePicker(seedStr) {
+  let seed = hashStringToInt(seedStr || "lifeos");
+  return function pick(arr) {
+    if (!arr?.length) return "";
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    const idx = Math.abs(seed) % arr.length;
+    return arr[idx];
+  };
+}
+
+function avg(arr) {
+  return arr.reduce((a, b) => a + b, 0) / Math.max(1, arr.length);
+}
+
+function getTrendLabel(moodSeries) {
+  const vals = moodSeries.map((p) => p.mood).filter((m) => Number.isFinite(m));
+  if (vals.length < 2) return null;
+
+  const mid = Math.floor(vals.length / 2);
+  const early = vals.slice(0, mid);
+  const late = vals.slice(mid);
+  const diff = avg(late) - avg(early);
+
+  if (diff > 0.5) return "up";
+  if (diff < -0.5) return "down";
+  return "steady";
+}
+
+function getPeakDay(moodSeries) {
+  let best = null;
+  for (const p of moodSeries) {
+    if (!Number.isFinite(p.mood)) continue;
+    if (!best || p.mood > best.mood) best = p;
+  }
+  return best;
+}
+
+function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPie }) {
+  const pick = makePicker(weekKey);
+
+  const moodAvg = moodStats?.avg;
+  const moodCount = moodStats?.count ?? 0;
+  const completion = tasksBar?.percent ?? 0;
+  const habitTotal = (habitsPie || []).reduce((a, h) => a + Number(h.checkins || 0), 0);
+
+  const trend = getTrendLabel(moodSeries);
+  const peak = getPeakDay(moodSeries);
+
+  const s = [];
+
+  // 1) opener
+  if (!Number.isFinite(moodAvg)) {
+    s.push(
+      pick([
+        "This week didn’t leave much of a mood trail — and that’s okay.",
+        "Quiet week on mood logs — no pressure.",
+        "Not much mood data this week, but we can still reflect gently.",
+      ])
+    );
+  } else if (moodAvg >= 7.5) {
+    s.push(
+      pick([
+        "You moved through this week with noticeably lighter energy.",
+        "This week carried a brighter tone overall.",
+        "Your energy felt strong and steady this week.",
+      ])
+    );
+  } else if (moodAvg >= 6) {
+    s.push(
+      pick([
+        "Your mood felt fairly balanced across the week.",
+        "This week looked like a mix — but mostly steady.",
+        "You held a gentle, workable rhythm this week.",
+      ])
+    );
+  } else {
+    s.push(
+      pick([
+        "This week felt a bit heavier emotionally.",
+        "Energy looked lower this week — it happens.",
+        "This week asked more from you than usual.",
+      ])
+    );
+  }
+
+  // 2) mood detail + pattern
+  if (Number.isFinite(moodAvg) && moodCount > 0) {
+    s.push(
+      pick([
+        `Your average mood landed around ${moodAvg}/10.`,
+        `Mood average came out to about ${moodAvg}/10.`,
+        `Across your logs, mood averaged ${moodAvg}/10.`,
+      ])
+    );
+
+    if (trend === "up") {
+      s.push(
+        pick([
+          "It trended upward as the week went on — a soft lift.",
+          "Your mood gently climbed toward the end of the week.",
+          "There was a quiet upward drift in your mood.",
+        ])
+      );
+    } else if (trend === "down") {
+      s.push(
+        pick([
+          "It dipped as the days progressed — consider a softer pace.",
+          "Mood slid downward later in the week — you might need recovery time.",
+          "There was a downward pull near the end of the week.",
+        ])
+      );
+    } else if (trend === "steady") {
+      s.push(
+        pick([
+          "It stayed fairly consistent — gentle stability.",
+          "Mood held steady without big swings.",
+          "Your mood line stayed relatively even.",
+        ])
+      );
+    }
+
+    if (peak) {
+      s.push(
+        pick([
+          `${peak.day} stood out as your brightest day.`,
+          `Your best mood day was ${peak.day}.`,
+          `${peak.day} looked like your high point.`,
+        ])
+      );
+    }
+  } else {
+    s.push(
+      pick([
+        "If you log even once or twice next week, patterns will start showing up.",
+        "A couple of mood logs next week will help this feel more personal.",
+        "Even a tiny check-in next week gives the chart more meaning.",
+      ])
+    );
+  }
+
+  // 3) tasks follow-through
+  if (completion >= 80) {
+    s.push(
+      pick([
+        `You followed through on most of your tasks (${completion}%).`,
+        `Task completion was strong at ${completion}%.`,
+        `You showed real follow-through — ${completion}% completed.`,
+      ])
+    );
+  } else if (completion >= 55) {
+    s.push(
+      pick([
+        `You made steady progress on tasks (${completion}% done).`,
+        `Tasks moved forward at a steady pace (${completion}%).`,
+        `You kept things moving — ${completion}% completed.`,
+      ])
+    );
+  } else if (completion > 0) {
+    s.push(
+      pick([
+        `Tasks slowed down this week (${completion}% completed).`,
+        `You did what you could — completion was ${completion}%.`,
+        `Progress was lighter this week (${completion}%).`,
+      ])
+    );
+  } else {
+    s.push(
+      pick([
+        "Tasks were quiet this week — not every week is for output.",
+        "Task completion didn’t register this week — could be a reset week.",
+        "No tasks finished this week — maybe your focus was elsewhere.",
+      ])
+    );
+  }
+
+  // 4) habits consistency
+  if (habitTotal >= 7) {
+    s.push(
+      pick([
+        "Habits were very consistent — small repetitions are stacking.",
+        "Your habit check-ins stayed strong — that’s quiet momentum.",
+        "You showed up for your habits a lot this week.",
+      ])
+    );
+  } else if (habitTotal >= 3) {
+    s.push(
+      pick([
+        "You kept a few habits going — that still counts.",
+        "Habits showed up a handful of times — good signal.",
+        "There’s a small consistency thread in your habits.",
+      ])
+    );
+  } else if (habitTotal > 0) {
+    s.push(
+      pick([
+        "Habits were light, but you still showed up at least once.",
+        "Even one habit check-in is proof you didn’t quit.",
+        "A small habit check-in is still a win.",
+      ])
+    );
+  } else {
+    s.push(
+      pick([
+        "Habits were quiet this week — consider choosing one easy anchor habit.",
+        "No habit check-ins logged — maybe keep it gentler next week.",
+        "No habit logs — a single tiny habit next week could change the feel.",
+      ])
+    );
+  }
+
+  // 5) gentle close
+  s.push(
+    pick([
+      "Next week: keep it simple. One small habit + one meaningful task is enough.",
+      "If the week felt messy, don’t fix everything — just choose one gentle priority.",
+      "You’re building awareness, not perfection. That’s the real win.",
+      "Try a softer start next week, then build up once energy returns.",
+      "If you want, aim for one small “anchor” next week — something easy to keep.",
+    ])
+  );
+
+  // 4–6 sentences (cap so it doesn’t feel too long)
+  return s.filter(Boolean).slice(0, 6).join(" ");
+}
+
+/* =========================
    Cute tooltip
 ========================= */
 function MoodTooltip({ active, payload, label }) {
@@ -108,7 +346,7 @@ function MoodTooltip({ active, payload, label }) {
 }
 
 /* =========================
-   New: hollow dots like SaaS charts
+   Hollow dots like SaaS charts
 ========================= */
 function MoodDot({ cx, cy, payload, stroke }) {
   if (!payload || payload.mood == null) return null;
@@ -161,8 +399,8 @@ export default function AnalyticsPage() {
     const arr = Array.isArray(list)
       ? list
       : Array.isArray(list?.reflections)
-        ? list.reflections
-        : [];
+      ? list.reflections
+      : [];
 
     setAllReflections(arr);
   }
@@ -245,6 +483,17 @@ export default function AnalyticsPage() {
     const insight = buildMoodInsight(moodSeries);
     return { count, avg, insight };
   }, [moodSeries]);
+
+  const weeklyInsight = useMemo(() => {
+    const key = data?.week?.start || "week";
+    return buildWeeklyInsight({
+      weekKey: key,
+      moodStats,
+      moodSeries,
+      tasksBar,
+      habitsPie,
+    });
+  }, [data?.week?.start, moodStats, moodSeries, tasksBar, habitsPie]);
 
   if (loading) return <div className="text-stone-500">Loading gently...</div>;
 
@@ -429,10 +678,10 @@ export default function AnalyticsPage() {
 
                       {/* soft area fill */}
                       <linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1">
-  <stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.38" />
-  <stop offset="55%" stopColor="#FBCFE8" stopOpacity="0.18" />
-  <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.06" />
-</linearGradient>
+                        <stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.38" />
+                        <stop offset="55%" stopColor="#FBCFE8" stopOpacity="0.18" />
+                        <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.06" />
+                      </linearGradient>
                     </defs>
 
                     {/* minimal horizontal grid like the reference */}
@@ -445,14 +694,15 @@ export default function AnalyticsPage() {
 
                     {/* area */}
                     <Area
-  type="monotone"
-  dataKey="mood"
-  stroke="none"
-  fill="url(#moodFill)"
-  fillOpacity={1}
-  connectNulls={false}
-  baseValue={1}
-/>
+                      type="monotone"
+                      dataKey="mood"
+                      stroke="none"
+                      fill="url(#moodFill)"
+                      fillOpacity={1}
+                      connectNulls={false}
+                      baseValue={1}
+                      isAnimationActive={true}
+                    />
 
                     {/* gradient line + hollow dots */}
                     <Line
@@ -475,13 +725,30 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Notifications */}
+          {/* ✨ Weekly Insight (replaces Notifications) */}
           <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
-            <div className="text-sm font-medium text-stone-900">Notifications</div>
-            <div className="mt-2 text-xs text-stone-600">
-              Sent: <span className="text-stone-800">{data?.push?.sent ?? 0}</span> • Failed:{" "}
-              <span className="text-stone-800">{data?.push?.failed ?? 0}</span> • Skipped:{" "}
-              <span className="text-stone-800">{data?.push?.skipped ?? 0}</span>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-stone-900">Weekly insight</div>
+                <div className="mt-1 text-xs text-stone-500">A tiny reflection based on your week.</div>
+              </div>
+              <div className="text-[11px] text-stone-500">✨</div>
+            </div>
+
+            <div className="mt-3 rounded-2xl bg-stone-50/70 p-3 text-sm text-stone-700 leading-relaxed">
+              {weeklyInsight}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-stone-500">
+              <span className="rounded-full border border-black/5 bg-white/70 px-2 py-1">
+                Mood avg: {moodStats.avg ?? "—"}
+              </span>
+              <span className="rounded-full border border-black/5 bg-white/70 px-2 py-1">
+                Tasks: {tasksBar.percent}%
+              </span>
+              <span className="rounded-full border border-black/5 bg-white/70 px-2 py-1">
+                Habit check-ins: {habitsPie.reduce((a, h) => a + Number(h.checkins || 0), 0)}
+              </span>
             </div>
           </div>
         </div>
