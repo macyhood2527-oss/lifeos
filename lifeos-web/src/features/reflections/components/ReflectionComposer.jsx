@@ -118,7 +118,7 @@ export default function ReflectionComposer({ initial, onSaved }) {
       setSaved(true);
       setTimeout(() => setSaved(false), 1200);
 
-      showToast("Reflection saved", "ok");
+      showToast("Reflection saved ✨", "ok");
       await onSaved?.();
     } catch (err) {
       console.error(err);
@@ -234,7 +234,7 @@ export default function ReflectionComposer({ initial, onSaved }) {
           disabled={busy}
           className="rounded-2xl border border-black/10 bg-rose-50 px-4 py-2 text-sm text-rose-900 hover:bg-rose-100 disabled:opacity-60"
         >
-          {busy ? "Saving…" : saved ? "Saved ✓" : "Save reflection"}
+          {busy ? "Saving…" : saved ? "Saved ✨" : "Save reflection"}
         </button>
 
         {lastSavedAt && (
