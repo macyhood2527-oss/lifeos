@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../shared/auth/useAuth";
 import { apiFetch } from "../../shared/api/http";
 import NotificationsCard from "../notifications/NotificationsCard";
@@ -56,6 +56,7 @@ function downloadJson(filename, data) {
 export default function SettingsPage() {
   const { user, refresh } = useAuth();
   const [toast, setToast] = useState(null); // { text, tone: "ok" | "warn" }
+  const toastTimerRef = useRef(null);
   const [busy, setBusy] = useState(false);
 
   const timezoneOptions = useMemo(() => getTimezones(), []);
@@ -86,9 +87,19 @@ export default function SettingsPage() {
     applyUiPreferences({ themeMood, density });
   }, [themeMood, density]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
   function showToast(text, tone = "ok") {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ text, tone });
-    setTimeout(() => setToast(null), 2600);
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 3200);
   }
 
   async function saveProfilePrefs(e) {
@@ -109,7 +120,7 @@ export default function SettingsPage() {
         }),
       });
       await refresh?.();
-      showToast("Profile updated.", "ok");
+      showToast("Changes saved ✨", "ok");
     } catch (e) {
       showToast("Could not update profile. Please retry.", "warn");
     } finally {
@@ -122,13 +133,13 @@ export default function SettingsPage() {
     localStorage.setItem("lifeos_pref_reminders", remindersEnabled ? "1" : "0");
     localStorage.setItem("lifeos_pref_habit_nudges", habitNudgesEnabled ? "1" : "0");
     localStorage.setItem("lifeos_pref_weekly_recap", weeklyRecapEnabled ? "1" : "0");
-    showToast("Notification preferences saved.", "ok");
+    showToast("Changes saved ✨", "ok");
   }
 
   function savePersonalizationPrefs(e) {
     e.preventDefault();
     saveUiPreferences({ themeMood, density });
-    showToast("Personalization saved.", "ok");
+    showToast("Changes saved ✨", "ok");
   }
 
   function chooseThemeMood(nextThemeMood) {
@@ -176,10 +187,12 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       {toast ? (
-        <div className="fixed bottom-4 right-4 z-[60] max-w-sm">
+        <div className="fixed inset-x-0 bottom-5 z-[90] flex justify-center px-4 pointer-events-none">
           <div
+            role="status"
+            aria-live="polite"
             className={[
-              "rounded-2xl border px-4 py-3 text-xs shadow-lg backdrop-blur",
+              "w-full max-w-md rounded-2xl border px-4 py-3 text-sm shadow-lg backdrop-blur text-center pointer-events-auto",
               toast.tone === "warn"
                 ? "border-rose-200 bg-rose-50/95 text-rose-800"
                 : "border-emerald-200 bg-emerald-50/95 text-emerald-800",
