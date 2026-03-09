@@ -13,6 +13,14 @@ export async function upsertReflection(payload) {
   return data?.reflection ?? data;
 }
 
+export async function upsertReflectionByDate(date, payload) {
+  const data = await apiFetch(`/api/reflections/${date}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  return data?.reflection ?? data;
+}
+
 export async function listReflections({ limit = 120, offset = 0 } = {}) {
   const data = await apiFetch(`/api/reflections?limit=${limit}&offset=${offset}`);
   return data?.reflections ?? [];

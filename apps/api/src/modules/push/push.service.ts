@@ -12,20 +12,44 @@ type SubRow = RowDataPacket & {
 
 export async function upsertSubscription(
   userId: number,
-  input: { endpoint: string; keys: { p256dh: string; auth: string } }
+  input: { endpoint: string; keys: { p256dh: string; auth: string }; userAgent?: string | null }
 ) {
-  // One subscription per endpoint (or per user if you prefer)
-  await pool.execute<ResultSetHeader>(
-    `
-    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
-    VALUES (?, ?, ?, ?, NOW(3))
-    ON DUPLICATE KEY UPDATE
-      user_id=VALUES(user_id),
-      p256dh=VALUES(p256dh),
-      auth=VALUES(auth)
-    `,
-    [userId, input.endpoint, input.keys.p256dh, input.keys.auth]
-  );
+  // Support both legacy and current push_subscriptions schemas.
+  try {
+    await pool.execute<ResultSetHeader>(
+      `
+      INSERT INTO push_subscriptions
+        (user_id, endpoint, p256dh, auth, user_agent, last_seen_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3), NOW(3))
+      ON DUPLICATE KEY UPDATE
+        user_id=VALUES(user_id),
+        p256dh=VALUES(p256dh),
+        auth=VALUES(auth),
+        user_agent=VALUES(user_agent),
+        last_seen_at=NOW(3),
+        updated_at=NOW(3)
+      `,
+      [userId, input.endpoint, input.keys.p256dh, input.keys.auth, input.userAgent ?? null]
+    );
+  } catch (err: any) {
+    // Fallback for older schema without user_agent/last_seen_at/updated_at columns.
+    const code = err?.code;
+    if (code !== "ER_BAD_FIELD_ERROR" && code !== "ER_NO_DEFAULT_FOR_FIELD") {
+      throw err;
+    }
+
+    await pool.execute<ResultSetHeader>(
+      `
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+      VALUES (?, ?, ?, ?, NOW(3))
+      ON DUPLICATE KEY UPDATE
+        user_id=VALUES(user_id),
+        p256dh=VALUES(p256dh),
+        auth=VALUES(auth)
+      `,
+      [userId, input.endpoint, input.keys.p256dh, input.keys.auth]
+    );
+  }
 
   const [rows] = await pool.query<SubRow[]>(
     `SELECT * FROM push_subscriptions WHERE user_id=? AND endpoint=? LIMIT 1`,

@@ -63,6 +63,19 @@ export default function HabitList({ habits, onCheckedIn }) {
     });
   }, [habits]);
 
+  const dueNow = useMemo(
+    () => normalized.filter((h) => !h.done && !h.started),
+    [normalized]
+  );
+  const inProgress = useMemo(
+    () => normalized.filter((h) => !h.done && h.started),
+    [normalized]
+  );
+  const completed = useMemo(
+    () => normalized.filter((h) => h.done),
+    [normalized]
+  );
+
   async function handleCheckin(habitId) {
     try {
       setBusyId(habitId);
@@ -78,6 +91,114 @@ export default function HabitList({ habits, onCheckedIn }) {
 
   if (!normalized.length) {
     return <div className="text-sm text-stone-500">No habits yet.</div>;
+  }
+
+  function SectionBlock({ title, tone = "stone", items }) {
+    if (!items.length) return null;
+
+    const tones = {
+      amber: "text-amber-800 bg-amber-50 border-amber-200",
+      sky: "text-sky-800 bg-sky-50 border-sky-200",
+      emerald: "text-emerald-800 bg-emerald-50 border-emerald-200",
+      stone: "text-stone-700 bg-white border-black/10",
+    };
+
+    return (
+      <div className="space-y-2">
+        <div
+          className={[
+            "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium",
+            tones[tone] || tones.stone,
+          ].join(" ")}
+        >
+          {title} ({items.length})
+        </div>
+        <div className="space-y-2">{items.map((h) => renderHabitCard(h))}</div>
+      </div>
+    );
+  }
+
+  function renderHabitCard(h) {
+    const isBusy = busyId === h.id;
+    const buttonLabel = h.done ? "Checked" : h.started ? "Add +1" : "Check in";
+    const pct = Math.round((h.progress / Math.max(1, h.target)) * 100);
+
+    return (
+      <div
+        key={h.id}
+        className={[
+          "relative flex items-center justify-between gap-3 rounded-2xl border p-3",
+          "transition-transform duration-150 ease-out hover:-translate-y-[1px]",
+          h.done
+            ? "border-emerald-200 bg-emerald-50/60"
+            : h.started
+            ? "border-sky-100 bg-sky-50/40"
+            : "border-amber-100 bg-amber-50/30",
+        ].join(" ")}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div
+              className={[
+                "text-sm font-medium truncate",
+                h.done ? "text-emerald-950" : "text-stone-900",
+              ].join(" ")}
+            >
+              {h.name}
+            </div>
+
+            <span
+              className={[
+                "shrink-0 text-xs rounded-xl border px-2 py-0.5",
+                h.done
+                  ? "border-emerald-200 bg-white/70 text-emerald-900"
+                  : "border-black/10 bg-white text-stone-700",
+              ].join(" ")}
+              title="Progress this period"
+            >
+              {h.progress}/{h.target}
+            </span>
+
+            {h.started && !h.done ? (
+              <span className="shrink-0 text-[11px] text-sky-800">in progress</span>
+            ) : null}
+          </div>
+
+          <div className="mt-1 text-xs text-stone-500">
+            {h.cadence} • target {h.target} per period
+          </div>
+
+          <div className="mt-2 h-1.5 w-full rounded-full border border-black/5 bg-white/80">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${pct}%`,
+                background: h.done
+                  ? "linear-gradient(90deg, #86EFAC, #4ADE80)"
+                  : h.started
+                  ? "linear-gradient(90deg, #7DD3FC, #A78BFA)"
+                  : "linear-gradient(90deg, #FDE68A, #FCA5A5)",
+              }}
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleCheckin(h.id)}
+          disabled={isBusy || h.done}
+          className={[
+            "shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition",
+            "w-full sm:w-auto disabled:opacity-60 active:scale-[0.98]",
+            h.done
+              ? "border-emerald-200 bg-white/70 text-emerald-900 cursor-default"
+              : "border-black/10 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+          ].join(" ")}
+        >
+          {isBusy ? "Checking…" : buttonLabel}
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -99,77 +220,10 @@ export default function HabitList({ habits, onCheckedIn }) {
         </div>
       ) : null}
 
-      <div className="space-y-2">
-        {normalized.map((h) => {
-          const isBusy = busyId === h.id;
-
-          const buttonLabel = h.done ? "Checked" : h.started ? "Add +1" : "Check in";
-
-          return (
-            <div
-              key={h.id}
-              className={[
-                "relative flex items-center justify-between gap-3 rounded-2xl border p-3",
-                "transition-transform duration-150 ease-out hover:-translate-y-[1px]",
-                h.done
-                  ? "border-emerald-200 bg-emerald-50/60"
-                  : h.started
-                  ? "border-emerald-100 bg-white/70"
-                  : "border-black/5 bg-white/70",
-              ].join(" ")}
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={[
-                      "text-sm font-medium truncate",
-                      h.done ? "text-emerald-950" : "text-stone-900",
-                    ].join(" ")}
-                  >
-                    {h.name}
-                  </div>
-
-                  <span
-                    className={[
-                      "shrink-0 text-xs rounded-xl border px-2 py-0.5",
-                      h.done
-                        ? "border-emerald-200 bg-white/70 text-emerald-900"
-                        : "border-black/10 bg-white text-stone-700",
-                    ].join(" ")}
-                    title="Progress this period"
-                  >
-                    {h.progress}/{h.target}
-                  </span>
-
-                  {h.started && !h.done ? (
-                    <span className="shrink-0 text-[11px] text-emerald-800">
-                      logged
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mt-1 text-xs text-stone-500">
-                  {h.cadence} • target {h.target} per period
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleCheckin(h.id)}
-                disabled={isBusy || h.done}
-                className={[
-                  "shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition",
-                  "disabled:opacity-60 active:scale-[0.98]",
-                  h.done
-                    ? "border-emerald-200 bg-white/70 text-emerald-900 cursor-default"
-                    : "border-black/10 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
-                ].join(" ")}
-              >
-                {isBusy ? "Checking…" : buttonLabel}
-              </button>
-            </div>
-          );
-        })}
+      <div className="space-y-4">
+        <SectionBlock title="Due now" tone="amber" items={dueNow} />
+        <SectionBlock title="In progress" tone="sky" items={inProgress} />
+        <SectionBlock title="Completed" tone="emerald" items={completed} />
       </div>
     </div>
   );

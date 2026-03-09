@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Section from "../../shared/ui/Section";
 import ReflectionComposer from "./components/ReflectionComposer";
 import { getTodayReflection } from "../today/today.api";
-import { listReflections } from "./reflections.api";
+import { listReflections, upsertReflectionByDate } from "./reflections.api";
 
 /* =========================
    Glass wrapper (since main panel removed)
@@ -88,6 +89,23 @@ function previewText(r) {
   return pick.length > 80 ? pick.slice(0, 80) + "…" : pick;
 }
 
+function hasReflectionContent(r) {
+  if (!r) return false;
+  return (
+    r?.mood != null ||
+    Boolean(String(r?.gratitude ?? "").trim()) ||
+    Boolean(String(r?.highlights ?? "").trim()) ||
+    Boolean(String(r?.challenges ?? "").trim()) ||
+    Boolean(String(r?.notes ?? "").trim())
+  );
+}
+
+function addDaysYMD(ymd, delta) {
+  const d = new Date(ymd + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  return ymdLocal(d);
+}
+
 /* =========================
    Mood tint helpers
 ========================= */
@@ -127,13 +145,25 @@ function moodToPastelColor(mood) {
   }
 }
 
+function isYMD(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
 export default function ReflectionsPage() {
+  const [searchParams] = useSearchParams();
+  const queryDate = searchParams.get("date");
+  const initialYMD = isYMD(queryDate) ? queryDate : ymdLocal(new Date());
+
   const [loading, setLoading] = useState(true);
   const [today, setToday] = useState(null);
   const [all, setAll] = useState([]);
 
-  const [viewDate, setViewDate] = useState(() => startOfMonth(new Date()));
-  const [selectedYMD, setSelectedYMD] = useState(() => ymdLocal(new Date()));
+  const [viewDate, setViewDate] = useState(() => {
+    const d = new Date(initialYMD + "T00:00:00");
+    return startOfMonth(d);
+  });
+  const [selectedYMD, setSelectedYMD] = useState(initialYMD);
+  const [showAllRecent, setShowAllRecent] = useState(false);
 
   async function load() {
     const [t, list] = await Promise.all([
@@ -159,6 +189,12 @@ export default function ReflectionsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isYMD(queryDate)) return;
+    setSelectedYMD(queryDate);
+    setViewDate(startOfMonth(new Date(queryDate + "T00:00:00")));
+  }, [queryDate]);
+
   const todayYMD = useMemo(() => ymdLocal(new Date()), []);
 
   // Map reflections by date (YYYY-MM-DD)
@@ -173,9 +209,71 @@ export default function ReflectionsPage() {
   }, [all, today]);
 
   const selected = useMemo(() => byDate.get(selectedYMD) ?? null, [byDate, selectedYMD]);
+  const isTodaySelected = selectedYMD === todayYMD;
+  const recentAll = useMemo(
+    () => (Array.isArray(all) ? all : []).slice(0, 120),
+    [all]
+  );
+  const recentCollapsedCount = 8;
+  const shouldCollapseRecent = recentAll.length > recentCollapsedCount;
+  const recentVisible = useMemo(
+    () =>
+      showAllRecent || !shouldCollapseRecent
+        ? recentAll
+        : recentAll.slice(0, recentCollapsedCount),
+    [recentAll, showAllRecent, shouldCollapseRecent]
+  );
 
   const monthCells = useMemo(() => buildMonthGrid(viewDate), [viewDate]);
   const weekLabels = useMemo(() => weekdayShortLabels(), []);
+  const insightToday = useMemo(() => new Date(), []);
+  const monthStartYMD = useMemo(() => ymdLocal(startOfMonth(insightToday)), [insightToday]);
+  const monthEndYMD = useMemo(() => ymdLocal(endOfMonth(insightToday)), [insightToday]);
+
+  const monthEntries = useMemo(() => {
+    return (Array.isArray(all) ? all : []).filter((r) => {
+      const ymd = String(r?.reflect_date ?? "").slice(0, 10);
+      return ymd && ymd >= monthStartYMD && ymd <= monthEndYMD;
+    });
+  }, [all, monthStartYMD, monthEndYMD]);
+
+  const monthAvgMood = useMemo(() => {
+    const moods = monthEntries
+      .map((r) => Number(r?.mood))
+      .filter((m) => Number.isFinite(m));
+    if (!moods.length) return null;
+    return Math.round((moods.reduce((a, b) => a + b, 0) / moods.length) * 10) / 10;
+  }, [monthEntries]);
+
+  const streak = useMemo(() => {
+    let s = 0;
+    let cur = todayYMD;
+    while (hasReflectionContent(byDate.get(cur))) {
+      s += 1;
+      cur = addDaysYMD(cur, -1);
+    }
+    return s;
+  }, [byDate, todayYMD]);
+
+  const recentGrouped = useMemo(() => {
+    const groups = [];
+    let lastKey = null;
+    for (const r of recentVisible) {
+      const ymd = String(r?.reflect_date ?? "").slice(0, 10);
+      const d = new Date(ymd + "T00:00:00");
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (key !== lastKey) {
+        groups.push({
+          key,
+          label: d.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+          items: [],
+        });
+        lastKey = key;
+      }
+      groups[groups.length - 1].items.push(r);
+    }
+    return groups;
+  }, [recentVisible]);
 
   if (loading) return <div className="text-stone-500">Loading gently...</div>;
 
@@ -183,6 +281,25 @@ export default function ReflectionsPage() {
     <div className="space-y-8">
       <GlassPanel>
         <Section title="Reflections" subtitle="Browse your days without clutter.">
+          <div className="mb-4 grid gap-2 sm:grid-cols-3">
+            <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
+              <div className="text-[11px] text-stone-500">Entries this month</div>
+              <div className="mt-1 text-sm font-semibold text-stone-900">{monthEntries.length}</div>
+            </div>
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/60 px-3 py-2">
+              <div className="text-[11px] text-violet-700">Avg mood this month</div>
+              <div className="mt-1 text-sm font-semibold text-violet-900">
+                {monthAvgMood != null ? `${monthAvgMood}/10` : "—"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 px-3 py-2">
+              <div className="text-[11px] text-emerald-700">Current streak</div>
+              <div className="mt-1 text-sm font-semibold text-emerald-900">
+                {streak} day{streak === 1 ? "" : "s"}
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Calendar */}
             <div className="rounded-2xl border border-black/5 bg-white/55 p-4 backdrop-blur-sm">
@@ -259,6 +376,25 @@ export default function ReflectionsPage() {
               <div className="mt-3 text-xs text-stone-500">
                 Days are softly tinted by mood (blue → purple → pink).
               </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-stone-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full border border-sky-200 bg-sky-100" />
+                  Low mood
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full border border-violet-200 bg-violet-100" />
+                  Mid mood
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full border border-pink-200 bg-pink-100" />
+                  High mood
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full border border-emerald-300" />
+                  Selected
+                </span>
+              </div>
             </div>
 
             {/* Selected Day */}
@@ -284,81 +420,78 @@ export default function ReflectionsPage() {
                 )}
               </div>
 
-              {/* Only today is editable */}
-              {selectedYMD === todayYMD ? (
-                <div className="mt-3">
-                  <ReflectionComposer initial={today} onSaved={load} />
-                </div>
-              ) : (
-                <div className="mt-3 space-y-3">
-                  {selected ? (
-                    <>
-                      <div className="rounded-xl border border-black/5 bg-white/55 p-3 backdrop-blur-sm">
-                        <div className="text-xs text-stone-500">Gratitude</div>
-                        <div className="mt-1 text-sm text-stone-900 whitespace-pre-wrap">
-                          {selected.gratitude ?? "—"}
-                        </div>
-                      </div>
+              <div className="mt-3 space-y-3">
+                {!isTodaySelected ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    You are editing <span className="font-medium">{selectedYMD}</span>. Saving will
+                    update this selected date.
+                  </div>
+                ) : null}
 
-                      <div className="rounded-xl border border-black/5 bg-white/55 p-3 backdrop-blur-sm">
-                        <div className="text-xs text-stone-500">Highlights</div>
-                        <div className="mt-1 text-sm text-stone-900 whitespace-pre-wrap">
-                          {selected.highlights ?? "—"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-black/5 bg-white/55 p-3 backdrop-blur-sm">
-                        <div className="text-xs text-stone-500">Challenges</div>
-                        <div className="mt-1 text-sm text-stone-900 whitespace-pre-wrap">
-                          {selected.challenges ?? "—"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-black/5 bg-white/55 p-3 backdrop-blur-sm">
-                        <div className="text-xs text-stone-500">Notes</div>
-                        <div className="mt-1 text-sm text-stone-900 whitespace-pre-wrap">
-                          {selected.notes ?? "—"}
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
-                      No reflection saved for this day.
-                    </div>
-                  )}
-                </div>
-              )}
+                <ReflectionComposer
+                  initial={isTodaySelected ? today : selected}
+                  saveReflection={
+                    isTodaySelected
+                      ? undefined
+                      : (payload) => upsertReflectionByDate(selectedYMD, payload)
+                  }
+                  onSaved={load}
+                />
+              </div>
             </div>
           </div>
 
           {/* Recent list */}
           <div className="mt-4 rounded-2xl border border-black/5 bg-white/55 p-4 backdrop-blur-sm">
             <div className="text-sm font-medium text-stone-900">Recent</div>
-            <div className="mt-2 space-y-2">
-              {(Array.isArray(all) ? all : []).slice(0, 12).map((r) => {
-                const key = String(r.reflect_date).slice(0, 10);
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedYMD(key);
-                      const dt = new Date(key + "T00:00:00");
-                      setViewDate(startOfMonth(dt));
-                    }}
-                    className="w-full text-left rounded-xl border border-black/10 bg-white/80 px-3 py-2 hover:bg-stone-50 active:scale-[0.99] transition"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs text-stone-600">{key}</div>
-                      <div className="text-xs text-stone-500">
-                        {r.mood != null ? `${r.mood}/10` : "—"}
-                      </div>
-                    </div>
-                    <div className="mt-1 text-sm text-stone-900">{previewText(r)}</div>
-                  </button>
-                );
-              })}
+            <div className="mt-2 space-y-3">
+              {recentGrouped.map((g) => (
+                <div key={g.key} className="space-y-2">
+                  <div className="sticky top-0 z-10 inline-flex rounded-full border border-black/10 bg-white/90 px-2.5 py-1 text-[11px] text-stone-600 backdrop-blur">
+                    {g.label}
+                  </div>
+                  <div className="space-y-2">
+                    {g.items.map((r) => {
+                      const key = String(r.reflect_date).slice(0, 10);
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedYMD(key);
+                            const dt = new Date(key + "T00:00:00");
+                            setViewDate(startOfMonth(dt));
+                          }}
+                          className="w-full text-left rounded-xl border border-black/10 bg-white/80 px-3 py-2 hover:bg-stone-50 active:scale-[0.99] transition"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs text-stone-600">{key}</div>
+                            <div className="text-xs text-stone-500">
+                              {r.mood != null ? `${r.mood}/10` : "—"}
+                            </div>
+                          </div>
+                          <div className="mt-1 text-sm text-stone-900">{previewText(r)}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
+
+            {shouldCollapseRecent ? (
+              <div className="mt-3 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setShowAllRecent((v) => !v)}
+                  className="rounded-full border border-black/10 bg-white/80 px-3 py-1.5 text-xs text-stone-700 hover:bg-stone-50"
+                >
+                  {showAllRecent
+                    ? "Show less"
+                    : `Show more (${recentAll.length - recentCollapsedCount})`}
+                </button>
+              </div>
+            ) : null}
           </div>
         </Section>
       </GlassPanel>

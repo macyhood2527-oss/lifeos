@@ -1,12 +1,29 @@
 import { Router } from "express";
 import passport from "passport";
 import { env } from "../../config/env";
-import { authRateLimit } from "../../middlewares/rateLimit";
-import { me, logout } from "./auth.controller";
+import {
+  authRateLimit,
+  localAuthRateLimit,
+  passwordResetRateLimit,
+} from "../../middlewares/rateLimit";
+import {
+  forgotPassword,
+  loginLocal,
+  me,
+  logout,
+  resetPassword,
+  signupLocal,
+  updateProfile,
+} from "./auth.controller";
 import { requireAuth } from "./auth.middleware";
 import { signAccessToken } from "./jwt"; // add this import
 
 export const authRouter = Router();
+
+authRouter.post("/signup", localAuthRateLimit, signupLocal);
+authRouter.post("/login", localAuthRateLimit, loginLocal);
+authRouter.post("/forgot-password", passwordResetRateLimit, forgotPassword);
+authRouter.post("/reset-password", passwordResetRateLimit, resetPassword);
 
 // Start Google auth
 authRouter.get(
@@ -33,6 +50,7 @@ authRouter.get(
 
 // Current session user
 authRouter.get("/me", requireAuth, me);
+authRouter.patch("/profile", requireAuth, updateProfile);
 
 // Logout
 authRouter.post("/logout", requireAuth, logout);

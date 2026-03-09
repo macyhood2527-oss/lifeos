@@ -6,3 +6,17 @@ export const authRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+
+export const localAuthRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+export const passwordResetRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+});

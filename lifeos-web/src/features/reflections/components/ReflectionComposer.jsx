@@ -51,7 +51,7 @@ function formatTime(value) {
   }).format(d);
 }
 
-export default function ReflectionComposer({ initial, onSaved }) {
+export default function ReflectionComposer({ initial, onSaved, saveReflection = upsertReflection }) {
   const [mood, setMood] = useState(initial?.mood ?? 7);
 
   const [gratitude, setGratitude] = useState(initial?.gratitude ?? "");
@@ -104,7 +104,7 @@ export default function ReflectionComposer({ initial, onSaved }) {
       setBusy(true);
 
       // Use server response so timestamp matches DB (best practice)
-      const savedReflection = await upsertReflection({
+      const savedReflection = await saveReflection({
         mood,
         gratitude: gratitude.trim() ? gratitude.trim() : null,
         highlights: highlights.trim() ? highlights.trim() : null,

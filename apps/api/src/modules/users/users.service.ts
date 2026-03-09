@@ -1,9 +1,11 @@
 import { pool } from "../../db/pool";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { createHash } from "crypto";
 
 export type UserRow = RowDataPacket & {
   id: number;
-  google_id: string;
+  google_id: string | null;
+  password_hash?: string | null;
   email: string;
   name: string;
   avatar_url: string | null;
@@ -15,12 +17,108 @@ export type UserRow = RowDataPacket & {
   updated_at: string;
 };
 
+const USER_PUBLIC_COLUMNS = `
+  id,
+  google_id,
+  email,
+  name,
+  avatar_url,
+  timezone,
+  tone,
+  quiet_hours_start,
+  quiet_hours_end,
+  created_at,
+  updated_at
+`;
+
 export async function findUserById(userId: number) {
   const [rows] = await pool.query<UserRow[]>(
-    `SELECT * FROM users WHERE id=? LIMIT 1`,
+    `SELECT ${USER_PUBLIC_COLUMNS} FROM users WHERE id=? LIMIT 1`,
     [userId]
   );
   return rows[0] ?? null;
+}
+
+export async function findUserByEmail(email: string) {
+  const [rows] = await pool.query<UserRow[]>(
+    `SELECT ${USER_PUBLIC_COLUMNS} FROM users WHERE email=? LIMIT 1`,
+    [email]
+  );
+  return rows[0] ?? null;
+}
+
+export async function findUserCredentialsByEmail(email: string) {
+  const [rows] = await pool.query<
+    (RowDataPacket & { id: number; password_hash: string | null })[]
+  >(
+    `SELECT id, password_hash FROM users WHERE email=? LIMIT 1`,
+    [email]
+  );
+  return rows[0] ?? null;
+}
+
+export async function createLocalUser(input: {
+  email: string;
+  name: string;
+  passwordHash: string;
+}) {
+  // Keep google_id compact for schemas with short varchar length.
+  const localGoogleId = `l_${createHash("sha256")
+    .update(input.email.toLowerCase())
+    .digest("hex")
+    .slice(0, 16)}`;
+
+  const [result] = await pool.execute<ResultSetHeader>(
+    `INSERT INTO users
+      (google_id, email, password_hash, name, avatar_url, timezone, tone, quiet_hours_start, quiet_hours_end, created_at, updated_at)
+     VALUES (?, ?, ?, ?, NULL, 'Asia/Manila', 'gentle', NULL, NULL, NOW(3), NOW(3))`,
+    [localGoogleId, input.email, input.passwordHash, input.name]
+  );
+
+  return (await findUserById(Number(result.insertId)))!;
+}
+
+export async function updateUserPasswordById(userId: number, passwordHash: string) {
+  await pool.execute(
+    `UPDATE users
+     SET password_hash=?, updated_at=NOW(3)
+     WHERE id=?`,
+    [passwordHash, userId]
+  );
+}
+
+export async function updateUserProfileById(
+  userId: number,
+  patch: Partial<{
+    name: string;
+    timezone: string;
+  }>
+) {
+  const fields: string[] = [];
+  const values: any[] = [];
+
+  if (patch.name !== undefined) {
+    fields.push("name=?");
+    values.push(patch.name);
+  }
+  if (patch.timezone !== undefined) {
+    fields.push("timezone=?");
+    values.push(patch.timezone);
+  }
+
+  if (fields.length === 0) {
+    return findUserById(userId);
+  }
+
+  values.push(userId);
+  await pool.execute(
+    `UPDATE users
+     SET ${fields.join(", ")}, updated_at=NOW(3)
+     WHERE id=?`,
+    values
+  );
+
+  return findUserById(userId);
 }
 
 export async function getUserSettings(userId: number) {
@@ -50,14 +148,14 @@ export async function findOrCreateUserFromGoogle(input: {
 }) {
   // 1) Try by google_id
   const [byGoogle] = await pool.query<UserRow[]>(
-    `SELECT * FROM users WHERE google_id=? LIMIT 1`,
+    `SELECT ${USER_PUBLIC_COLUMNS} FROM users WHERE google_id=? LIMIT 1`,
     [input.googleId]
   );
   if (byGoogle[0]) return byGoogle[0];
 
   // 2) Try by email (link account)
   const [byEmail] = await pool.query<UserRow[]>(
-    `SELECT * FROM users WHERE email=? LIMIT 1`,
+    `SELECT ${USER_PUBLIC_COLUMNS} FROM users WHERE email=? LIMIT 1`,
     [input.email]
   );
 

@@ -88,7 +88,10 @@ export async function subscribe(req: Request, res: Response) {
     });
   }
 
-  await upsertSubscription(userId, sub);
+  await upsertSubscription(userId, {
+    ...sub,
+    userAgent: req.get("user-agent") || null,
+  });
   return res.status(201).json({ ok: true });
 }
 

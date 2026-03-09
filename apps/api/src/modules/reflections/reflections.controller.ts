@@ -26,6 +26,19 @@ export async function upsertToday(req: Request, res: Response) {
   return res.json({ reflection });
 }
 
+export async function upsertByDate(req: Request, res: Response) {
+  const userId = (req.user as any).id as number;
+  const raw = req.params.date;
+  const date = Array.isArray(raw) ? raw[0] : raw;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
+  }
+
+  const reflection = await service.upsertReflection(userId, date, req.body);
+  return res.json({ reflection });
+}
+
 export async function list(req: Request, res: Response) {
   const userId = (req.user as any).id as number;
 
@@ -40,8 +53,8 @@ export async function list(req: Request, res: Response) {
 
 export async function getByDate(req: Request, res: Response) {
   const userId = (req.user as any).id as number;
-const raw = req.params.date;
-const date = Array.isArray(raw) ? raw[0] : raw;
+  const raw = req.params.date;
+  const date = Array.isArray(raw) ? raw[0] : raw;
 
   const reflection = await service.getReflectionByDate(userId, date);
   if (!reflection) return res.status(404).json({ error: "Reflection not found" });

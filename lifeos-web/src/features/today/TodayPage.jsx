@@ -54,6 +54,7 @@ function pickDailyMessage(messages, seedKey) {
 
 export default function TodayPage() {
   const [loading, setLoading] = useState(true);
+  const [reflectionOpen, setReflectionOpen] = useState(true);
 
   const [summaryError, setSummaryError] = useState(null);
   const [habitsError, setHabitsError] = useState(null);
@@ -138,6 +139,54 @@ export default function TodayPage() {
       .slice(0, 5);
   }, [tasks]);
 
+  const taskStats = useMemo(() => {
+    const list = Array.isArray(tasks) ? tasks : [];
+    const total = list.length;
+    const done = list.filter((t) => t.status === "done").length;
+    const left = Math.max(0, total - done);
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, left, percent };
+  }, [tasks]);
+
+  const habitStats = useMemo(() => {
+    function getTarget(h) {
+      return Number(h?.target_per_period ?? h?.target ?? 1) || 1;
+    }
+
+    function getProgress(h) {
+      if (Number.isFinite(Number(h?.progress))) return Number(h.progress);
+      if (h?.thisPeriodProgress?.value != null) return Number(h.thisPeriodProgress.value) || 0;
+      if (h?.checked_in_today === true) return 1;
+      return 0;
+    }
+
+    const list = Array.isArray(habits) ? habits : [];
+    const total = list.length;
+    const done = list.filter((h) => {
+      const target = getTarget(h);
+      const progress = Math.min(getProgress(h), target);
+      return progress >= target;
+    }).length;
+    const left = Math.max(0, total - done);
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, left, percent };
+  }, [habits]);
+
+  const reflectionLogged = useMemo(() => {
+    if (!reflection) return false;
+    const hasMood = reflection?.mood != null;
+    const hasText =
+      Boolean(String(reflection?.gratitude ?? "").trim()) ||
+      Boolean(String(reflection?.highlights ?? "").trim()) ||
+      Boolean(String(reflection?.challenges ?? "").trim()) ||
+      Boolean(String(reflection?.notes ?? "").trim());
+    return hasMood || hasText;
+  }, [reflection]);
+
+  useEffect(() => {
+    setReflectionOpen(!reflectionLogged);
+  }, [reflectionLogged]);
+
   const fallbackMessages = useMemo(
     () => [
       // anchor (your original line)
@@ -203,6 +252,23 @@ export default function TodayPage() {
           </span>
         }
       >
+        <div className="mb-4 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
+            <div className="text-[11px] text-stone-500">Tasks left</div>
+            <div className="mt-1 text-sm font-semibold text-stone-900">{taskStats.left}</div>
+          </div>
+          <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
+            <div className="text-[11px] text-stone-500">Habits due</div>
+            <div className="mt-1 text-sm font-semibold text-stone-900">{habitStats.left}</div>
+          </div>
+          <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
+            <div className="text-[11px] text-stone-500">Mood</div>
+            <div className="mt-1 text-sm font-semibold text-stone-900">
+              {reflectionLogged ? "Logged" : "Pending"}
+            </div>
+          </div>
+        </div>
+
         {summaryError ? (
           <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
             {summaryError}
@@ -216,6 +282,46 @@ export default function TodayPage() {
             {dailyMessage || "One small step is enough today."}
           </div>
         )}
+
+        <div className="mt-4 rounded-2xl border border-black/5 bg-white/70 p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="flex items-center justify-between text-[11px] text-stone-600">
+                <span>Tasks progress</span>
+                <span className="font-medium text-stone-800">
+                  {taskStats.done}/{taskStats.total}
+                </span>
+              </div>
+              <div className="mt-1 h-2 rounded-full border border-black/5 bg-stone-100">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${taskStats.percent}%`,
+                    background: "linear-gradient(90deg, #BBF7D0, #86EFAC)",
+                  }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-[11px] text-stone-600">
+                <span>Habits progress</span>
+                <span className="font-medium text-stone-800">
+                  {habitStats.done}/{habitStats.total}
+                </span>
+              </div>
+              <div className="mt-1 h-2 rounded-full border border-black/5 bg-stone-100">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${habitStats.percent}%`,
+                    background: "linear-gradient(90deg, #BAE6FD, #C4B5FD)",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </GlassPanel>
 
       {/* 🔔 Soft Signals */}
@@ -282,6 +388,15 @@ export default function TodayPage() {
       <GlassPanel
         title="Reflection"
         subtitle="A gentle note for your future self."
+        rightSlot={
+          <button
+            type="button"
+            onClick={() => setReflectionOpen((v) => !v)}
+            className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-xs text-stone-700 hover:bg-stone-50"
+          >
+            {reflectionOpen ? "Collapse" : reflectionLogged ? "Edit reflection" : "Open reflection"}
+          </button>
+        }
       >
         {reflectionError && (
           <div className="mb-3 rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
@@ -289,7 +404,13 @@ export default function TodayPage() {
           </div>
         )}
 
-        <ReflectionComposer initial={reflection} onSaved={reload} />
+        {!reflectionOpen && reflectionLogged ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">
+            Reflection logged for today. Tap <span className="font-medium">Edit reflection</span> to update it.
+          </div>
+        ) : (
+          <ReflectionComposer initial={reflection} onSaved={reload} />
+        )}
       </GlassPanel>
     </div>
   );

@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import bgTile from "../../assets/bg-tile.jpg";
 import lifeosBanner from "../../assets/lifeos-banner.png";
 import InstallAppFloating from "../../shared/ui/InstallAppFloating";
+import { applyUiPreferences, loadUiPreferences } from "../../shared/ui/uiPreferences";
 
 const linkBase =
   "relative shrink-0 rounded-2xl px-3 py-2 text-sm whitespace-nowrap " +
@@ -36,6 +37,7 @@ export default function AppShell() {
     { key: "tasks", label: "Tasks", to: "/tasks" },
     { key: "reflections", label: "Reflections", to: "/reflections" },
     { key: "analytics", label: "Analytics", to: "/analytics" },
+    { key: "settings", label: "Settings", to: "/settings" },
   ];
 
   function activeKeyFromPath(pathname) {
@@ -44,6 +46,7 @@ export default function AppShell() {
     if (pathname.startsWith("/tasks")) return "tasks";
     if (pathname.startsWith("/reflections")) return "reflections";
     if (pathname.startsWith("/analytics")) return "analytics";
+    if (pathname.startsWith("/settings")) return "settings";
     return "today";
   }
 
@@ -79,6 +82,13 @@ export default function AppShell() {
 
   // ✅ Memo so it doesn't re-create on every route render
   const installChip = useMemo(() => <InstallAppFloating />, []);
+
+  useEffect(() => {
+    applyUiPreferences(loadUiPreferences());
+    const onPrefsChanged = () => applyUiPreferences(loadUiPreferences());
+    window.addEventListener("lifeos-ui-prefs-changed", onPrefsChanged);
+    return () => window.removeEventListener("lifeos-ui-prefs-changed", onPrefsChanged);
+  }, []);
 
   return (
     <div
@@ -116,8 +126,14 @@ export default function AppShell() {
         }
       `}</style>
 
-      <div className="min-h-screen bg-gradient-to-b from-emerald-50/80 via-rose-50/70 to-stone-50/80 backdrop-blur-[1px]">
-        <div className="mx-auto max-w-5xl p-4 md:p-6">
+      <div
+        className="min-h-screen backdrop-blur-[1px]"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, var(--lifeos-bg-from), var(--lifeos-bg-via), var(--lifeos-bg-to))",
+        }}
+      >
+        <div className="mx-auto max-w-5xl" style={{ padding: "var(--lifeos-page-pad)" }}>
           {/* ===== HEADER ===== */}
           <div className="relative rounded-3xl border border-black/5 shadow-sm overflow-hidden fade-up">
             {/* Glass gradient base */}
@@ -197,7 +213,7 @@ export default function AppShell() {
           </div>
 
           {/* ===== MAIN ===== */}
-          <main className="mt-6">
+          <main className="mt-6" style={{ marginTop: "var(--lifeos-stack-gap)" }}>
             <Outlet />
           </main>
 
@@ -205,7 +221,16 @@ export default function AppShell() {
         {/* ===== FOOTER ===== */}
 <footer className="mt-6 text-center text-xs text-stone-500">
   <div className="rounded-3xl border border-black/5 bg-white/40 px-4 py-5 backdrop-blur">
-    <div>✨ Built gently by Melissa Marcelo 🌸</div>
+    <div>
+      ✨ Built gently by{" "}
+      <NavLink
+        to="/about-me"
+        className="underline decoration-black/20 hover:decoration-black/40 hover:text-stone-700 transition"
+      >
+        Melissa Marcelo
+      </NavLink>{" "}
+      🌸
+    </div>
     <div className="mt-1">LifeOS. calm progress over pressure.</div>
 
     {/* Divider */}
@@ -218,6 +243,15 @@ export default function AppShell() {
         className="underline decoration-black/20 hover:decoration-black/40 hover:text-stone-700 transition"
       >
         Privacy
+      </NavLink>
+
+      <span className="text-stone-400">•</span>
+
+      <NavLink
+        to="/faqs"
+        className="underline decoration-black/20 hover:decoration-black/40 hover:text-stone-700 transition"
+      >
+        FAQs
       </NavLink>
 
       <span className="text-stone-400">•</span>

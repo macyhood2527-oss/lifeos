@@ -73,6 +73,38 @@ export default function HabitsPage() {
     [habits]
   );
 
+  const activeHabitStats = useMemo(() => {
+    function getTarget(h) {
+      return Number(h?.target_per_period ?? h?.target ?? 1) || 1;
+    }
+    function getProgress(h) {
+      if (Number.isFinite(Number(h?.progress))) return Number(h.progress);
+      if (h?.thisPeriodProgress?.value != null) return Number(h.thisPeriodProgress.value) || 0;
+      if (h?.checked_in_today === true) return 1;
+      return 0;
+    }
+
+    const list = Array.isArray(activeHabits) ? activeHabits : [];
+    const total = list.length;
+    const dueNow = list.filter((h) => {
+      const target = getTarget(h);
+      const progress = Math.min(getProgress(h), target);
+      return progress === 0;
+    }).length;
+    const inProgress = list.filter((h) => {
+      const target = getTarget(h);
+      const progress = Math.min(getProgress(h), target);
+      return progress > 0 && progress < target;
+    }).length;
+    const completed = list.filter((h) => {
+      const target = getTarget(h);
+      const progress = Math.min(getProgress(h), target);
+      return progress >= target;
+    }).length;
+    const completion = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, dueNow, inProgress, completed, completion };
+  }, [activeHabits]);
+
   async function handleCreate(e) {
     e.preventDefault();
     const n = name.trim();
@@ -379,6 +411,27 @@ export default function HabitsPage() {
       {/* Check-in list */}
       <GlassPanel>
         <Section title="Check in" subtitle="Small check-ins, steady progress.">
+          <div className="mb-4 grid gap-2 sm:grid-cols-4">
+            <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
+              <div className="text-[11px] text-stone-500">Total habits</div>
+              <div className="mt-1 text-sm font-semibold text-stone-900">{activeHabitStats.total}</div>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3 py-2">
+              <div className="text-[11px] text-amber-800">Due now</div>
+              <div className="mt-1 text-sm font-semibold text-amber-900">{activeHabitStats.dueNow}</div>
+            </div>
+            <div className="rounded-2xl border border-sky-200 bg-sky-50/60 px-3 py-2">
+              <div className="text-[11px] text-sky-800">In progress</div>
+              <div className="mt-1 text-sm font-semibold text-sky-900">{activeHabitStats.inProgress}</div>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 px-3 py-2">
+              <div className="text-[11px] text-emerald-800">Completed</div>
+              <div className="mt-1 text-sm font-semibold text-emerald-900">
+                {activeHabitStats.completed} ({activeHabitStats.completion}%)
+              </div>
+            </div>
+          </div>
+
           {activeHabits.length === 0 ? (
             <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
               No active habits yet. Add one above — start tiny.

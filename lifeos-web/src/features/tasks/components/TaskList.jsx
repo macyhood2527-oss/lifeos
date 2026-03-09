@@ -8,9 +8,7 @@ export default function TaskList({ tasks, onUpdated }) {
   const [draftById, setDraftById] = useState({});
   const [toast, setToast] = useState(null);
   const [confirm, setConfirm] = useState(null);
-
-  // Drag state
-  const [dragId, setDragId] = useState(null);
+  const [filter, setFilter] = useState("all");
 
   // Done column collapse
   const [doneOpen, setDoneOpen] = useState(false);
@@ -34,9 +32,31 @@ export default function TaskList({ tasks, onUpdated }) {
   }
 
   const list = Array.isArray(tasks) ? tasks : [];
+  const todayYMD = useMemo(() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
+  function getDueState(t) {
+    const due = String(t?.due_date ?? "").slice(0, 10);
+    if (!due) return "nodue";
+    if (due < todayYMD) return "overdue";
+    if (due === todayYMD) return "today";
+    return "upcoming";
+  }
 
   const todo = list.filter((t) => t.status !== "done");
   const done = list.filter((t) => t.status === "done");
+  const filteredTodo = useMemo(() => {
+    if (filter === "all") return todo;
+    if (filter === "due_today") return todo.filter((t) => getDueState(t) === "today");
+    if (filter === "overdue") return todo.filter((t) => getDueState(t) === "overdue");
+    if (filter === "no_due") return todo.filter((t) => getDueState(t) === "nodue");
+    return todo;
+  }, [todo, filter]);
 
   // Auto-collapse done column when empty
   useEffect(() => {
@@ -185,44 +205,30 @@ export default function TaskList({ tasks, onUpdated }) {
     );
   }
 
-  // ===== Drag & drop handlers =====
-  function onDragStart(e, t) {
-    const tid = String(t.id);
-    setDragId(tid);
-    try {
-      e.dataTransfer.setData("text/plain", tid);
-      e.dataTransfer.effectAllowed = "move";
-    } catch {
-      // some environments might restrict; we'll rely on state fallback
-    }
-  }
-
-  function onDragEnd() {
-    setDragId(null);
-  }
-
-  async function handleDropToStatus(e, status) {
-    e.preventDefault();
-    const tid = e.dataTransfer?.getData?.("text/plain") || dragId;
-    if (!tid) return;
-
-    const t = taskById.get(String(tid));
-    if (!t) return;
-
-    // no-op if already same status
-    const current = t.status === "done" ? "done" : "todo";
-    const target = status === "done" ? "done" : "todo";
-    if (current === target) return;
-
-    // avoid double actions while busy
-    if (busyId) return;
-
-    await setStatus(t.id, status);
-    setDragId(null);
-  }
-
-  function allowDrop(e) {
-    e.preventDefault();
+  function DueBadge({ task }) {
+    const due = String(task?.due_date ?? "").slice(0, 10);
+    const state = getDueState(task);
+    const styles = {
+      overdue: "border-rose-200 bg-rose-50 text-rose-700",
+      today: "border-amber-200 bg-amber-50 text-amber-800",
+      upcoming: "border-sky-200 bg-sky-50 text-sky-700",
+      nodue: "border-black/10 bg-white text-stone-500",
+    };
+    const label =
+      state === "overdue"
+        ? `Overdue ${due}`
+        : state === "today"
+        ? "Due today"
+        : state === "upcoming"
+        ? `Due ${due}`
+        : "No due date";
+    return (
+      <span
+        className={`text-[10px] px-2 py-1 rounded-full border ${styles[state] || styles.nodue}`}
+      >
+        {label}
+      </span>
+    );
   }
 
   // ===== Card =====
@@ -240,19 +246,13 @@ export default function TaskList({ tasks, onUpdated }) {
         ? "task-slide-to-todo"
         : "";
 
-    const isDragging = dragId === tid;
-
     return (
       <div
         key={tid}
-        draggable={!isBusy}
-        onDragStart={(e) => onDragStart(e, t)}
-        onDragEnd={onDragEnd}
         className={[
           "rounded-2xl border p-3 bg-white/80 backdrop-blur transition",
           "hover:-translate-y-[1px] hover:shadow-sm",
           isDone ? "opacity-70" : "",
-          isDragging ? "ring-2 ring-black/10 opacity-60" : "",
           moveClass,
         ].join(" ")}
       >
@@ -269,7 +269,7 @@ export default function TaskList({ tasks, onUpdated }) {
 
             <div className="mt-1 flex items-center gap-2 text-xs text-stone-500 flex-wrap">
               {t.priority && <PriorityBadge priority={t.priority} />}
-              {t.due_date ? <span>Due {t.due_date}</span> : <span className="opacity-60">No due date</span>}
+              <DueBadge task={t} />
             </div>
           </div>
 
@@ -404,7 +404,7 @@ export default function TaskList({ tasks, onUpdated }) {
       {/* Top row: Done collapse toggle */}
       <div className="mb-3 flex items-center justify-between">
         <div className="text-xs text-stone-500">
-          Tip: drag a task card to move it between columns ✨
+          Use Done/Undo on each task to move between lists ✨
         </div>
 
         <button
@@ -425,6 +425,32 @@ export default function TaskList({ tasks, onUpdated }) {
         </button>
       </div>
 
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {[
+          { key: "all", label: "All" },
+          { key: "due_today", label: "Due today" },
+          { key: "overdue", label: "Overdue" },
+          { key: "no_due", label: "No due date" },
+        ].map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            className={[
+              "rounded-full border px-2.5 py-1 text-[11px] transition",
+              filter === f.key
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                : "border-black/10 bg-white/80 text-stone-700 hover:bg-stone-50",
+            ].join(" ")}
+          >
+            {f.label}
+          </button>
+        ))}
+        {filter !== "all" ? (
+          <span className="text-[11px] text-stone-500">Filters apply to To do.</span>
+        ) : null}
+      </div>
+
       {/* Kanban Layout */}
       <div
         className={`grid gap-6 ${
@@ -433,38 +459,32 @@ export default function TaskList({ tasks, onUpdated }) {
       >
         {/* Todo Column */}
         <div
-          onDragOver={allowDrop}
-          onDrop={(e) => handleDropToStatus(e, "todo")}
           className={`rounded-3xl border border-black/5 bg-white/50 p-3`}
         >
           <div className="mb-3 flex items-center justify-between">
             <div className="text-xs font-semibold text-stone-500 uppercase tracking-wide">
-              To do ({todo.length})
+              To do ({filteredTodo.length})
             </div>
-            <div className="text-[11px] text-stone-400">Drop here</div>
           </div>
 
-          {todo.length === 0 ? (
+          {filteredTodo.length === 0 ? (
             <div className="rounded-2xl bg-white/60 border border-black/5 p-4 text-sm text-stone-500">
-              All clear for now 🌿
+              {filter === "all" ? "All clear for now 🌿" : "No tasks match this filter."}
             </div>
           ) : (
-            <div className="space-y-3">{todo.map((t) => TaskCard(t))}</div>
+            <div className="space-y-3">{filteredTodo.map((t) => TaskCard(t))}</div>
           )}
         </div>
 
         {/* Done Column (collapsible) */}
         {showDoneColumn ? (
           <div
-            onDragOver={allowDrop}
-            onDrop={(e) => handleDropToStatus(e, "done")}
             className={`rounded-3xl border border-black/5 bg-white/40 p-3`}
           >
             <div className="mb-3 flex items-center justify-between">
               <div className="text-xs font-semibold text-stone-500 uppercase tracking-wide">
                 Done ({done.length})
               </div>
-              <div className="text-[11px] text-stone-400">Drop here</div>
             </div>
 
             <div className="space-y-3">{done.map((t) => TaskCard(t))}</div>

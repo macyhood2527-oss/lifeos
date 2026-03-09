@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --lifeos-bg-from: rgba(236, 253, 245, 0.8);
+  --lifeos-bg-via: rgba(255, 241, 242, 0.72);
+  --lifeos-bg-to: rgba(250, 250, 249, 0.86);
+  --lifeos-page-pad: 1rem;
+  --lifeos-stack-gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --lifeos-page-pad: 1.5rem;
+  }
+}
+
+html[data-lifeos-theme="calm"] {
+  --lifeos-bg-from: rgba(236, 253, 245, 0.8);
+  --lifeos-bg-via: rgba(255, 241, 242, 0.72);
+  --lifeos-bg-to: rgba(250, 250, 249, 0.86);
+}
+
+html[data-lifeos-theme="warm"] {
+  --lifeos-bg-from: rgba(255, 247, 237, 0.82);
+  --lifeos-bg-via: rgba(255, 237, 213, 0.72);
+  --lifeos-bg-to: rgba(254, 249, 195, 0.72);
+}
+
+html[data-lifeos-theme="focus"] {
+  --lifeos-bg-from: rgba(239, 246, 255, 0.82);
+  --lifeos-bg-via: rgba(238, 242, 255, 0.74);
+  --lifeos-bg-to: rgba(240, 249, 255, 0.82);
+}
+
+html[data-lifeos-theme="pink"] {
+  --lifeos-bg-from: rgba(253, 242, 248, 0.84);
+  --lifeos-bg-via: rgba(252, 231, 243, 0.74);
+  --lifeos-bg-to: rgba(255, 241, 242, 0.8);
+}
+
+html[data-lifeos-theme="purple"] {
+  --lifeos-bg-from: rgba(245, 243, 255, 0.84);
+  --lifeos-bg-via: rgba(237, 233, 254, 0.76);
+  --lifeos-bg-to: rgba(240, 249, 255, 0.8);
+}
+
+html[data-lifeos-density="compact"] {
+  font-size: 15px;
+  --lifeos-page-pad: 0.75rem;
+  --lifeos-stack-gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  html[data-lifeos-density="compact"] {
+    --lifeos-page-pad: 1rem;
+  }
+}
+
+html[data-lifeos-density="comfortable"] {
+  font-size: 16px;
+}

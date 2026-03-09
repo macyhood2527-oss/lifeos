@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Section from "../../shared/ui/Section";
 import { getWeeklyAnalytics } from "./analytics.api";
 
@@ -10,7 +11,7 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
+  ComposedChart,
   Line,
   XAxis,
   YAxis,
@@ -55,6 +56,30 @@ function isBetweenInclusive(ymd, start, end) {
 
 function weekdayLabelFromIndex(i) {
   return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i] ?? "";
+}
+
+function weekdayShortFromYMD(ymd) {
+  const d = new Date(ymd + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "short" });
+}
+
+function shortMonthDayFromYMD(ymd) {
+  const d = new Date(ymd + "T00:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function ymdNowInTimeZone(tz) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz || "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const d = parts.find((p) => p.type === "day")?.value;
+  return `${y}-${m}-${d}`;
 }
 
 function buildMoodInsight(series) {
@@ -326,8 +351,11 @@ function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPi
 function MoodTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
 
-  const v = payload[0]?.value;
-  const ymd = payload[0]?.payload?.ymd;
+  const moodPoint = payload.find((p) => p?.dataKey === "mood") ?? payload[0];
+  const v = moodPoint?.value;
+  const ymd = moodPoint?.payload?.ymd;
+  const isFuture = Boolean(moodPoint?.payload?.isFuture);
+  const isMissedPast = Boolean(moodPoint?.payload?.isMissedPast);
 
   const mood = Number.isFinite(Number(v)) ? Number(v) : null;
 
@@ -336,10 +364,17 @@ function MoodTooltip({ active, payload, label }) {
       <div className="text-stone-900 font-medium">{label}</div>
       <div className="text-stone-500">{ymd}</div>
       <div className="mt-1 text-stone-800">
-        Mood:{" "}
-        <span className="font-semibold">
-          {mood != null ? `${mood}/10` : "—"}
-        </span>
+        {mood != null ? (
+          <>
+            Mood: <span className="font-semibold">{mood}/10</span>
+          </>
+        ) : isFuture ? (
+          <>Future day</>
+        ) : isMissedPast ? (
+          <>Missed mood log</>
+        ) : (
+          <>No mood log</>
+        )}
       </div>
     </div>
   );
@@ -376,10 +411,49 @@ function MoodActiveDot({ cx, cy, stroke }) {
   );
 }
 
+function MissingMoodDot({ cx, cy, payload, onPickDate }) {
+  if (!payload || !payload.isMissedPast) return null;
+  return (
+    <g
+      onClick={() => onPickDate?.(payload.ymd)}
+      style={{ cursor: "pointer" }}
+      aria-label={`Backfill mood for ${payload.day}`}
+    >
+      <circle
+        cx={cx}
+        cy={cy}
+        r={5}
+        fill="#fff"
+        stroke="rgba(120,120,120,0.45)"
+        strokeWidth={1.5}
+        strokeDasharray="3 2"
+      />
+      <line x1={cx - 2.2} y1={cy} x2={cx + 2.2} y2={cy} stroke="rgba(120,120,120,0.45)" strokeWidth={1.2} />
+      <line x1={cx} y1={cy - 2.2} x2={cx} y2={cy + 2.2} stroke="rgba(120,120,120,0.45)" strokeWidth={1.2} />
+    </g>
+  );
+}
+
+function FutureMoodDot({ cx, cy, payload }) {
+  if (!payload || !payload.isFuture) return null;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={4.2}
+      fill="rgba(148,163,184,0.14)"
+      stroke="rgba(100,116,139,0.35)"
+      strokeWidth={1.3}
+    />
+  );
+}
+
 export default function AnalyticsPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [weekStart, setWeekStart] = useState(null);
+  const [moodRange, setMoodRange] = useState("7d");
 
   const [allReflections, setAllReflections] = useState([]);
 
@@ -454,8 +528,8 @@ export default function AnalyticsPage() {
     }
   }, [tasksBar.percent]);
 
-  // ✅ Build 7-day mood series (Mon→Sun) for current week
-  const moodSeries = useMemo(() => {
+  // Weekly mood series (used for weekly insight + recap semantics)
+  const weeklyMoodSeries = useMemo(() => {
     const start = data?.week?.start;
     const end = data?.week?.end;
     if (!start || !end) return [];
@@ -476,6 +550,57 @@ export default function AnalyticsPage() {
     });
   }, [data?.week?.start, data?.week?.end, allReflections]);
 
+  const weeklyMoodStats = useMemo(() => {
+    const moods = weeklyMoodSeries.map((d) => d.mood).filter((m) => Number.isFinite(m));
+    const count = moods.length;
+    const avg = count ? Math.round((moods.reduce((a, b) => a + b, 0) / count) * 10) / 10 : null;
+    const insight = buildMoodInsight(weeklyMoodSeries);
+    return { count, avg, insight };
+  }, [weeklyMoodSeries]);
+
+  const todayYMDInWeekTZ = useMemo(
+    () => ymdNowInTimeZone(data?.week?.timeZone),
+    [data?.week?.timeZone]
+  );
+
+  const moodRangeDays = useMemo(() => {
+    if (moodRange === "30d") return 30;
+    return 7;
+  }, [moodRange]);
+
+  const moodTrendEndYMD = useMemo(() => {
+    const weekEnd = data?.week?.end;
+    if (!weekEnd) return todayYMDInWeekTZ;
+    return weekEnd < todayYMDInWeekTZ ? weekEnd : todayYMDInWeekTZ;
+  }, [data?.week?.end, todayYMDInWeekTZ]);
+
+  const moodSeries = useMemo(() => {
+    const end = moodTrendEndYMD;
+    if (!end) return [];
+
+    const map = new Map();
+    for (const r of Array.isArray(allReflections) ? allReflections : []) {
+      const ymd = ymdFromAny(r.reflect_date);
+      const mood = Number(r.mood);
+      if (ymd && Number.isFinite(mood)) map.set(ymd, clamp(mood, 1, 10));
+    }
+
+    return Array.from({ length: moodRangeDays }).map((_, idx) => {
+      const back = moodRangeDays - 1 - idx;
+      const ymd = addDays(end, -back);
+      const mood = map.has(ymd) ? map.get(ymd) : null;
+
+      let label = "";
+      if (moodRangeDays === 7) {
+        label = weekdayShortFromYMD(ymd);
+      } else if (idx === 0 || idx === moodRangeDays - 1 || idx % 7 === 0) {
+        label = shortMonthDayFromYMD(ymd);
+      }
+
+      return { day: label, ymd, mood };
+    });
+  }, [moodTrendEndYMD, moodRangeDays, allReflections]);
+
   const moodStats = useMemo(() => {
     const moods = moodSeries.map((d) => d.mood).filter((m) => Number.isFinite(m));
     const count = moods.length;
@@ -484,16 +609,68 @@ export default function AnalyticsPage() {
     return { count, avg, insight };
   }, [moodSeries]);
 
+  const missingMoodDays = useMemo(
+    () => moodSeries.filter((d) => d.mood == null && d.ymd < todayYMDInWeekTZ),
+    [moodSeries, todayYMDInWeekTZ]
+  );
+
+  const futureMoodDays = useMemo(
+    () => moodSeries.filter((d) => d.mood == null && d.ymd > todayYMDInWeekTZ),
+    [moodSeries, todayYMDInWeekTZ]
+  );
+
+  const moodSeriesForChart = useMemo(
+    () =>
+      moodSeries.map((d) => ({
+        ...d,
+        isMissedPast: d.mood == null && d.ymd < todayYMDInWeekTZ,
+        isFuture: d.mood == null && d.ymd > todayYMDInWeekTZ,
+        missingMarker: d.mood == null && d.ymd < todayYMDInWeekTZ ? 0.6 : null,
+        futureMarker: d.mood == null && d.ymd > todayYMDInWeekTZ ? 0.6 : null,
+      })),
+    [moodSeries, todayYMDInWeekTZ]
+  );
+
+  function goToBackfill(ymd) {
+    if (!ymd) return;
+    navigate(`/reflections?date=${encodeURIComponent(ymd)}`);
+  }
+
   const weeklyInsight = useMemo(() => {
     const key = data?.week?.start || "week";
     return buildWeeklyInsight({
       weekKey: key,
-      moodStats,
-      moodSeries,
+      moodStats: weeklyMoodStats,
+      moodSeries: weeklyMoodSeries,
       tasksBar,
       habitsPie,
     });
-  }, [data?.week?.start, moodStats, moodSeries, tasksBar, habitsPie]);
+  }, [data?.week?.start, weeklyMoodStats, weeklyMoodSeries, tasksBar, habitsPie]);
+
+  const moodTaskCorrelation = useMemo(() => {
+    if (!Number.isFinite(weeklyMoodStats.avg)) return "Not enough mood data to compare with tasks yet.";
+    if (weeklyMoodStats.count < 3) return "Too few mood logs this week for a strong mood-task pattern.";
+    if (tasksBar.created === 0) return "No tasks created this week, so mood-task correlation is limited.";
+
+    if (weeklyMoodStats.avg >= 7 && tasksBar.percent >= 70) return "Higher mood aligned with strong task completion.";
+    if (weeklyMoodStats.avg <= 5 && tasksBar.percent < 55) return "Lower mood coincided with lighter task completion.";
+    if (weeklyMoodStats.avg >= 7 && tasksBar.percent < 55) return "Mood stayed high, but tasks completion lagged.";
+    if (weeklyMoodStats.avg <= 5 && tasksBar.percent >= 70) return "Task completion stayed strong despite lower mood.";
+    return "Mood and task completion looked fairly neutral this week.";
+  }, [weeklyMoodStats.avg, weeklyMoodStats.count, tasksBar.created, tasksBar.percent]);
+
+  const moodHabitCorrelation = useMemo(() => {
+    const habitTotal = habitsPie.reduce((a, h) => a + Number(h.checkins || 0), 0);
+    if (!Number.isFinite(weeklyMoodStats.avg)) return "Not enough mood data to compare with habits yet.";
+    if (weeklyMoodStats.count < 3) return "Too few mood logs this week for a strong mood-habit pattern.";
+    if (habitTotal === 0) return "No habit check-ins this week, so mood-habit correlation is limited.";
+
+    if (weeklyMoodStats.avg >= 7 && habitTotal >= 5) return "Higher mood moved with steady habit consistency.";
+    if (weeklyMoodStats.avg <= 5 && habitTotal <= 2) return "Lower mood and lighter habit consistency appeared together.";
+    if (weeklyMoodStats.avg >= 7 && habitTotal <= 2) return "Mood stayed high even with few habit check-ins.";
+    if (weeklyMoodStats.avg <= 5 && habitTotal >= 5) return "Habit consistency held up despite lower mood.";
+    return "Mood and habit consistency looked mixed this week.";
+  }, [weeklyMoodStats.avg, weeklyMoodStats.count, habitsPie]);
 
   if (loading) return <div className="text-stone-500">Loading gently...</div>;
 
@@ -592,7 +769,23 @@ export default function AnalyticsPage() {
 
           {/* Tasks */}
           <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
-            <div className="text-sm font-medium text-stone-900">Tasks</div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-stone-900">Tasks</div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50/70 px-2 py-1 text-emerald-900">
+                    Created: <span className="font-semibold">{tasksBar.created}</span>
+                  </span>
+                  <span className="rounded-full border border-sky-200 bg-sky-50/70 px-2 py-1 text-sky-900">
+                    Completed: <span className="font-semibold">{tasksBar.completed}</span>
+                  </span>
+                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
+                    Completion: <span className="font-semibold text-stone-900">{tasksBar.percent}%</span>
+                  </span>
+                </div>
+              </div>
+              <div className="text-[11px] text-stone-500">This week</div>
+            </div>
 
             <div className="mt-3 grid grid-cols-3 gap-3">
               <div className="rounded-2xl border border-black/5 bg-emerald-50 p-3 transition hover:-translate-y-[1px] hover:shadow-sm">
@@ -650,24 +843,54 @@ export default function AnalyticsPage() {
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {/* 🌈 Mood Trend */}
           <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-stone-900">Mood trend</div>
-                <div className="mt-1 text-xs text-stone-500">
-                  {moodStats.count} logs this week • Avg mood: {moodStats.avg ?? "—"}
+                <div className="mt-2 inline-flex max-w-full overflow-x-auto rounded-full border border-black/10 bg-white/80 p-0.5 text-[11px]">
+                  {[
+                    { key: "7d", label: "7d" },
+                    { key: "30d", label: "30d" },
+                  ].map((r) => (
+                    <button
+                      key={r.key}
+                      type="button"
+                      onClick={() => setMoodRange(r.key)}
+                      className={[
+                        "rounded-full px-2.5 py-1 transition",
+                        moodRange === r.key
+                          ? "bg-emerald-50 text-emerald-900 border border-emerald-200"
+                          : "text-stone-600 hover:bg-stone-100",
+                      ].join(" ")}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
+                    Logged: <span className="font-semibold text-stone-900">{moodStats.count}</span>
+                  </span>
+                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
+                    Avg: <span className="font-semibold text-stone-900">{moodStats.avg ?? "—"}</span>
+                  </span>
+                  <span className="rounded-full border border-amber-200 bg-amber-50/70 px-2 py-1 text-amber-900">
+                    Missed: <span className="font-semibold">{missingMoodDays.length}</span>
+                  </span>
                 </div>
               </div>
-              <div className="text-[11px] text-stone-500">Mon → Sun</div>
+              <div className="text-[11px] text-stone-500">
+                {moodRange === "7d" ? "Last 7 days" : "Last 30 days"}
+              </div>
             </div>
 
-            <div className="mt-3 h-40 rounded-2xl border border-black/5 bg-white/35 p-2">
+            <div className="mt-3 h-44 sm:h-40 rounded-2xl border border-black/10 bg-white/60 p-2">
               {moodSeries.every((d) => d.mood == null) ? (
                 <div className="h-full flex items-center justify-center text-sm text-stone-500">
                   No mood logs yet — add one in Reflections 🌿
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={moodSeries} margin={{ top: 14, right: 14, bottom: 6, left: 0 }}>
+                  <ComposedChart data={moodSeriesForChart} margin={{ top: 14, right: 14, bottom: 6, left: 0 }}>
                     <defs>
                       {/* pastel gradient line */}
                       <linearGradient id="moodLine" x1="0" y1="0" x2="1" y2="0">
@@ -676,11 +899,11 @@ export default function AnalyticsPage() {
                         <stop offset="100%" stopColor="#FBCFE8" />
                       </linearGradient>
 
-                      {/* soft area fill */}
+                      {/* pastel area gradient */}
                       <linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#C4B5FD" stopOpacity="0.38" />
-                        <stop offset="55%" stopColor="#FBCFE8" stopOpacity="0.18" />
-                        <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.06" />
+                        <stop offset="0%" stopColor="#BFDBFE" stopOpacity="0.62" />
+                        <stop offset="45%" stopColor="#C4B5FD" stopOpacity="0.44" />
+                        <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.20" />
                       </linearGradient>
                     </defs>
 
@@ -688,7 +911,7 @@ export default function AnalyticsPage() {
                     <CartesianGrid vertical={false} stroke="rgba(0,0,0,0.05)" />
 
                     <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis domain={[1, 10]} hide />
+                    <YAxis domain={[0, 10]} hide />
 
                     <Tooltip content={<MoodTooltip />} cursor={{ stroke: "rgba(0,0,0,0.06)" }} />
 
@@ -700,8 +923,28 @@ export default function AnalyticsPage() {
                       fill="url(#moodFill)"
                       fillOpacity={1}
                       connectNulls={false}
-                      baseValue={1}
+                      baseValue={0}
                       isAnimationActive={true}
+                    />
+
+                    {/* missed-day markers (click to backfill) */}
+                    <Line
+                      type="linear"
+                      dataKey="missingMarker"
+                      stroke="none"
+                      dot={<MissingMoodDot onPickDate={goToBackfill} />}
+                      activeDot={false}
+                      isAnimationActive={false}
+                    />
+
+                    {/* future-day markers */}
+                    <Line
+                      type="linear"
+                      dataKey="futureMarker"
+                      stroke="none"
+                      dot={<FutureMoodDot />}
+                      activeDot={false}
+                      isAnimationActive={false}
                     />
 
                     {/* gradient line + hollow dots */}
@@ -715,10 +958,56 @@ export default function AnalyticsPage() {
                       activeDot={<MoodActiveDot />}
                       isAnimationActive={true}
                     />
-                  </LineChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               )}
             </div>
+
+            <div className="mt-2 text-[11px] text-stone-500">
+              Trend window ends on <span className="font-medium text-stone-700">{moodTrendEndYMD}</span>{" "}
+              ({week?.timeZone ?? "timezone unknown"}).
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-stone-500">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full border border-violet-300 bg-white" />
+                Logged
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full border border-stone-400 border-dashed bg-white" />
+                Missed (past)
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full border border-slate-400/60 bg-slate-200/60" />
+                Future ({futureMoodDays.length})
+              </span>
+            </div>
+
+            {missingMoodDays.length > 0 ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3">
+                <div className="text-xs text-amber-900">
+                  Missed mood check-ins. Tap a day to backfill:
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {missingMoodDays.map((d) => (
+                    <button
+                      key={d.ymd}
+                      type="button"
+                      onClick={() => goToBackfill(d.ymd)}
+                      className="rounded-full border border-amber-300 bg-white/80 px-2.5 py-1 text-[11px] text-amber-900 hover:bg-white"
+                    >
+                      {d.day}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {moodStats.count < 3 ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
+                Sparse mood data in this range ({moodStats.count} logs). Treat trend readouts as directional only.
+              </div>
+            ) : null}
 
             <div className="mt-3 rounded-2xl bg-stone-50/70 p-3 text-sm text-stone-700">
               {moodStats.insight}
@@ -730,26 +1019,43 @@ export default function AnalyticsPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-stone-900">Weekly insight</div>
-                <div className="mt-1 text-xs text-stone-500">A tiny reflection based on your week.</div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
+                    Mood avg: <span className="font-semibold text-stone-900">{weeklyMoodStats.avg ?? "—"}</span>
+                  </span>
+                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
+                    Tasks: <span className="font-semibold text-stone-900">{tasksBar.percent}%</span>
+                  </span>
+                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
+                    Habit check-ins:{" "}
+                    <span className="font-semibold text-stone-900">
+                      {habitsPie.reduce((a, h) => a + Number(h.checkins || 0), 0)}
+                    </span>
+                  </span>
+                </div>
               </div>
-              <div className="text-[11px] text-stone-500">✨</div>
+              <div className="text-[11px] text-stone-500">This week ✨</div>
             </div>
 
             <div className="mt-3 rounded-2xl bg-stone-50/70 p-3 text-sm text-stone-700 leading-relaxed">
               {weeklyInsight}
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-stone-500">
-              <span className="rounded-full border border-black/5 bg-white/70 px-2 py-1">
-                Mood avg: {moodStats.avg ?? "—"}
-              </span>
-              <span className="rounded-full border border-black/5 bg-white/70 px-2 py-1">
-                Tasks: {tasksBar.percent}%
-              </span>
-              <span className="rounded-full border border-black/5 bg-white/70 px-2 py-1">
-                Habit check-ins: {habitsPie.reduce((a, h) => a + Number(h.checkins || 0), 0)}
-              </span>
+            <div className="mt-3 grid gap-2">
+              <div className="rounded-2xl border border-black/5 bg-white/80 p-3 text-xs text-stone-700">
+                <span className="font-medium text-stone-900">Mood × Tasks:</span> {moodTaskCorrelation}
+              </div>
+              <div className="rounded-2xl border border-black/5 bg-white/80 p-3 text-xs text-stone-700">
+                <span className="font-medium text-stone-900">Mood × Habits:</span> {moodHabitCorrelation}
+              </div>
             </div>
+
+            {weeklyMoodStats.count < 3 ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
+                Weekly insight is based on sparse mood logs ({weeklyMoodStats.count} this week), so interpretation is
+                conservative.
+              </div>
+            ) : null}
           </div>
         </div>
       </Section>
