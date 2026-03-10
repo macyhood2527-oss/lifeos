@@ -127,7 +127,7 @@ export default function HabitList({ habits, onCheckedIn }) {
       <div
         key={h.id}
         className={[
-          "relative flex items-center justify-between gap-3 rounded-2xl border p-3",
+          "relative flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between",
           "transition-transform duration-150 ease-out hover:-translate-y-[1px]",
           h.done
             ? "border-emerald-200 bg-emerald-50/60"
@@ -137,10 +137,10 @@ export default function HabitList({ habits, onCheckedIn }) {
         ].join(" ")}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div
               className={[
-                "text-sm font-medium truncate",
+                "min-w-0 flex-[999] text-sm font-medium break-words",
                 h.done ? "text-emerald-950" : "text-stone-900",
               ].join(" ")}
             >

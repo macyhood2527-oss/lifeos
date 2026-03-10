@@ -321,20 +321,20 @@ export default function HabitsPage() {
                   ].join(" ")}
                 >
                   {!isEditing ? (
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-stone-900 truncate">{h.name}</div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-stone-900 break-words">{h.name}</div>
                         <div className="mt-1 text-xs text-stone-500">
                           {h.cadence} • target {h.target_per_period} per period{" "}
                           {isInactive ? "• inactive" : ""}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 sm:shrink-0">
                         <button
                           type="button"
                           onClick={() => startEdit(h)}
-                          className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 active:scale-[0.98]"
+                          className="flex-1 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 active:scale-[0.98] sm:flex-none"
                         >
                           Edit
                         </button>
@@ -344,7 +344,7 @@ export default function HabitsPage() {
                             type="button"
                             disabled={isBusy}
                             onClick={() => disableHabit(h.id)}
-                            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 active:scale-[0.98] disabled:opacity-60"
+                            className="flex-1 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 active:scale-[0.98] disabled:opacity-60 sm:flex-none"
                             title="Disable habit"
                           >
                             Disable
