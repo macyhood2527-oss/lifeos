@@ -1,46 +1,56 @@
+import { Suspense, lazy } from "react";
 import { createBrowserRouter } from "react-router-dom";
 
 import RequireAuth from "../shared/auth/RequireAuth";
-import AuthCallbackPage from "../pages/AuthCallbackPage";
-import PrivacyPage from "../pages/PrivacyPage";
-import TermsPage from "../pages/TermsPage";
-import FaqsPage from "../pages/FaqsPage";
-import AboutPage from "../pages/AboutPage";
-import AppShell from "../features/layout/AppShell";
+import Loader from "../shared/ui/loader";
 
-import LoginPage from "../pages/LoginPage";
-import TodayPage from "../features/today/TodayPage";
-import HabitsPage from "../features/habits/HabitsPage";
-import TasksPage from "../features/tasks/TasksPage";
-import ReflectionsPage from "../features/reflections/ReflectionsPage";
-import AnalyticsPage from "../features/analytics/AnalyticsPage";
-import SettingsPage from "../features/settings/SettingsPage";
+const AuthCallbackPage = lazy(() => import("../pages/AuthCallbackPage"));
+const PrivacyPage = lazy(() => import("../pages/PrivacyPage"));
+const TermsPage = lazy(() => import("../pages/TermsPage"));
+const FaqsPage = lazy(() => import("../pages/FaqsPage"));
+const AboutPage = lazy(() => import("../pages/AboutPage"));
+const AppShell = lazy(() => import("../features/layout/AppShell"));
+const LoginPage = lazy(() => import("../pages/LoginPage"));
+const TodayPage = lazy(() => import("../features/today/TodayPage"));
+const HabitsPage = lazy(() => import("../features/habits/HabitsPage"));
+const TasksPage = lazy(() => import("../features/tasks/TasksPage"));
+const ReflectionsPage = lazy(() => import("../features/reflections/ReflectionsPage"));
+const AnalyticsPage = lazy(() => import("../features/analytics/AnalyticsPage"));
+const SettingsPage = lazy(() => import("../features/settings/SettingsPage"));
+
+function withSuspense(element, { small = false } = {}) {
+  return (
+    <Suspense fallback={<Loader small={small} />}>
+      {element}
+    </Suspense>
+  );
+}
 
 export const router = createBrowserRouter([
   // PUBLIC ROUTES
-  { path: "/login", element: <LoginPage /> },
-  { path: "/auth/callback", element: <AuthCallbackPage /> },
-  { path: "/privacy", element: <PrivacyPage /> },   // ✅ add this
-  { path: "/terms", element: <TermsPage /> },       // ✅ add this
-  { path: "/faqs", element: <FaqsPage /> },
-  { path: "/about-me", element: <AboutPage /> },
+  { path: "/login", element: withSuspense(<LoginPage />) },
+  { path: "/auth/callback", element: withSuspense(<AuthCallbackPage />) },
+  { path: "/privacy", element: withSuspense(<PrivacyPage />) },
+  { path: "/terms", element: withSuspense(<TermsPage />) },
+  { path: "/faqs", element: withSuspense(<FaqsPage />) },
+  { path: "/about-me", element: withSuspense(<AboutPage />) },
 
   // PROTECTED APP
   {
     path: "/",
     element: (
       <RequireAuth>
-        <AppShell />
+        {withSuspense(<AppShell />)}
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <TodayPage /> },
-      { path: "today", element: <TodayPage /> },
-      { path: "habits", element: <HabitsPage /> },
-      { path: "tasks", element: <TasksPage /> },
-      { path: "reflections", element: <ReflectionsPage /> },
-      { path: "analytics", element: <AnalyticsPage /> },
-      { path: "settings", element: <SettingsPage /> },
+      { index: true, element: withSuspense(<TodayPage />, { small: true }) },
+      { path: "today", element: withSuspense(<TodayPage />, { small: true }) },
+      { path: "habits", element: withSuspense(<HabitsPage />, { small: true }) },
+      { path: "tasks", element: withSuspense(<TasksPage />, { small: true }) },
+      { path: "reflections", element: withSuspense(<ReflectionsPage />, { small: true }) },
+      { path: "analytics", element: withSuspense(<AnalyticsPage />, { small: true }) },
+      { path: "settings", element: withSuspense(<SettingsPage />, { small: true }) },
     ],
   },
 ]);
