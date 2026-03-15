@@ -1,7 +1,7 @@
 // lifeos-web/src/pages/AuthCallbackPage.jsx
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../shared/auth/AuthProvider";
+import { useAuth } from "../shared/auth/useAuth";
 import bgTile from "../assets/bg-tile.jpg";
 
 export default function AuthCallbackPage() {

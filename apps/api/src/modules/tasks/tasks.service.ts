@@ -144,3 +144,11 @@ export async function deleteTask(userId: number, taskId: number) {
   );
   return result.affectedRows > 0;
 }
+
+export async function deleteAllTasks(userId: number) {
+  const [result] = await pool.execute<ResultSetHeader>(
+    `DELETE FROM tasks WHERE user_id = ?`,
+    [userId]
+  );
+  return result.affectedRows;
+}

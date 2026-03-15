@@ -95,3 +95,12 @@ export async function archiveProject(userId: number, projectId: number) {
 
   return getProjectById(userId, projectId);
 }
+
+export async function hardDeleteAllProjects(userId: number) {
+  const [result] = await pool.execute<ResultSetHeader>(
+    `DELETE FROM projects WHERE user_id = ?`,
+    [userId]
+  );
+
+  return result.affectedRows;
+}

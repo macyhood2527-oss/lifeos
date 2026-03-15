@@ -30,6 +30,12 @@ export type ReminderRow = RowDataPacket & {
 // MySQL SET order in your column definition:
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 type DayToken = (typeof DAY_ORDER)[number];
+type ReminderSummaryRow = RowDataPacket & {
+  total: number;
+  enabled_count: number;
+  paused_count: number;
+  due_count: number;
+};
 
 function normalizeDaysSet(days: DayToken[] | null | undefined): DayToken[] | null {
   if (!days || days.length === 0) return null;
@@ -55,8 +61,8 @@ function daysSetToDbString(days: DayToken[] | null | undefined): string | null {
   return normalized.join(",");
 }
 
-function computeNextFromTimeAndDays(timeHHMM: string, daysOfWeekDb: string | null) {
-  const now = new Date();
+function computeNextFromTimeAndDays(timeHHMM: string, daysOfWeekDb: string | null, baseDate?: Date) {
+  const now = baseDate ? new Date(baseDate) : new Date();
   const [hh, mm] = timeHHMM.slice(0, 5).split(":").map(Number);
 
   const allowed = parseDaysSetString(daysOfWeekDb); // null => every day
@@ -166,6 +172,37 @@ export async function listReminders(userId: number) {
   return rows;
 }
 
+export async function getReminderSummary(userId: number) {
+  const [rows] = await pool.query<ReminderSummaryRow[]>(
+    `
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled_count,
+      SUM(CASE WHEN enabled = 0 THEN 1 ELSE 0 END) AS paused_count,
+      SUM(
+        CASE
+          WHEN enabled = 1
+           AND COALESCE(next_run_at, due_at) IS NOT NULL
+           AND COALESCE(next_run_at, due_at) <= NOW()
+          THEN 1
+          ELSE 0
+        END
+      ) AS due_count
+    FROM reminders
+    WHERE user_id = ?
+    `,
+    [userId]
+  );
+
+  const row = rows[0];
+  return {
+    total: Number(row?.total ?? 0),
+    enabled: Number(row?.enabled_count ?? 0),
+    paused: Number(row?.paused_count ?? 0),
+    due: Number(row?.due_count ?? 0),
+  };
+}
+
 export async function getReminderById(userId: number, id: number) {
   const [rows] = await pool.query<ReminderRow[]>(
     `SELECT * FROM reminders WHERE user_id=? AND id=? LIMIT 1`,
@@ -251,6 +288,14 @@ export async function deleteReminder(userId: number, id: number) {
   return result.affectedRows > 0;
 }
 
+export async function deleteAllReminders(userId: number) {
+  const [result] = await pool.execute<ResultSetHeader>(
+    `DELETE FROM reminders WHERE user_id=?`,
+    [userId]
+  );
+  return result.affectedRows;
+}
+
 // scheduler usage
 export async function listDueReminders(now: Date) {
   const [rows] = await pool.query<ReminderRow[]>(
@@ -270,14 +315,30 @@ export async function markRan(reminderId: number, ranAt: Date, nextRunAt: Date |
   );
 }
 
-export function computeNextRunAfterSend(r: ReminderRow) {
+export function computeNextRunAfterSend(r: ReminderRow, baseDate?: Date) {
   if (r.schedule_type === "cron") {
     // placeholder until cron parsing: every minute
-    return new Date(Date.now() + 60_000);
+    const now = baseDate ? new Date(baseDate) : new Date();
+    return new Date(now.getTime() + 60_000);
   }
   if (r.due_at) return null; // one-shot reminder
-  if (!r.time_of_day) return new Date(Date.now() + 60_000);
-  return computeNextFromTimeAndDays(r.time_of_day.slice(0, 5), r.days_of_week);
+  if (!r.time_of_day) {
+    const now = baseDate ? new Date(baseDate) : new Date();
+    return new Date(now.getTime() + 60_000);
+  }
+  return computeNextFromTimeAndDays(r.time_of_day.slice(0, 5), r.days_of_week, baseDate);
+}
+
+export async function handleReminderToday(userId: number, reminderId: number) {
+  const reminder = await getReminderById(userId, reminderId);
+  if (!reminder) return null;
+
+  const ranAt = new Date();
+  const baseDate = reminder.next_run_at ? new Date(reminder.next_run_at) : ranAt;
+  const nextRunAt = computeNextRunAfterSend(reminder, baseDate);
+
+  await markRan(reminder.id, ranAt, nextRunAt);
+  return getReminderById(userId, reminderId);
 }
 
 type EntityTitleRow = RowDataPacket & { title?: string; name?: string };

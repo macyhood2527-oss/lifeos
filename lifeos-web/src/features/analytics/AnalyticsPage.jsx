@@ -1,36 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Section from "../../shared/ui/Section";
 import { getWeeklyAnalytics } from "./analytics.api";
+import { Icons } from "../../config/icons";
 
 // ✅ adjust path if yours differs
 import { listReflections } from "../reflections/reflections.api";
 
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  ComposedChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Area,
-  CartesianGrid,
-} from "recharts";
-
-// Pastel palette (soft, varied)
-const PIE_COLORS = [
-  "#BEE3F8", // pastel blue
-  "#C4B5FD", // pastel purple
-  "#FBCFE8", // pastel pink
-  "#BBF7D0", // pastel green
-  "#FDE68A", // pastel yellow
-  "#FED7AA", // pastel peach
-  "#A7F3D0", // mint
-  "#DDD6FE", // lavender
-];
+const AnalyticsCharts = lazy(() => import("./AnalyticsCharts"));
 
 function addDays(ymd, delta) {
   const d = new Date(ymd + "T00:00:00");
@@ -84,11 +61,11 @@ function ymdNowInTimeZone(tz) {
 
 function buildMoodInsight(series) {
   const vals = series.map((p) => p.mood).filter((m) => Number.isFinite(m));
-  if (vals.length === 0) return "No mood logs yet — add one in Reflections when you’re ready.";
-  if (vals.length === 1) return "One mood log this week — a tiny start counts.";
+  if (vals.length === 0) return "No mood logs yet. Add one in Reflections whenever you feel ready.";
+  if (vals.length === 1) return "You logged your mood once this week. That small start still counts.";
 
   const withMood = series.filter((p) => Number.isFinite(p.mood));
-  if (withMood.length < 2) return "Not enough mood logs to spot a trend yet.";
+  if (withMood.length < 2) return "There is not enough mood data yet to spot a clear pattern.";
 
   const mids = Math.floor(withMood.length / 2);
   const early = withMood.slice(0, mids).map((p) => p.mood);
@@ -99,11 +76,11 @@ function buildMoodInsight(series) {
   const a2 = avg(late);
   const diff = a2 - a1;
 
-  if (Math.abs(diff) < 0.35) return "Mood stayed fairly steady — gentle consistency.";
-  if (diff >= 0.35 && diff < 1.25) return "Mood nudged upward — small wins, gently.";
-  if (diff >= 1.25) return "Mood rose noticeably — you’re finding your rhythm.";
-  if (diff <= -0.35 && diff > -1.25) return "Mood dipped a little — consider a softer pace this week.";
-  return "Mood dipped noticeably — be extra kind to yourself.";
+  if (Math.abs(diff) < 0.35) return "Your mood stayed fairly steady this week.";
+  if (diff >= 0.35 && diff < 1.25) return "Your mood lifted a little as the week went on.";
+  if (diff >= 1.25) return "Your mood improved quite a bit through the week.";
+  if (diff <= -0.35 && diff > -1.25) return "Your mood dipped a little, so a softer pace may help.";
+  return "Your mood dropped quite a bit this week, so extra kindness would help.";
 }
 
 /* =========================
@@ -157,6 +134,21 @@ function getPeakDay(moodSeries) {
   return best;
 }
 
+function getLowestDay(moodSeries) {
+  let lowest = null;
+  for (const p of moodSeries) {
+    if (!Number.isFinite(p.mood)) continue;
+    if (!lowest || p.mood < lowest.mood) lowest = p;
+  }
+  return lowest;
+}
+
+function getTopHabit(habitsPie) {
+  const list = Array.isArray(habitsPie) ? habitsPie : [];
+  if (!list.length) return null;
+  return [...list].sort((a, b) => Number(b.checkins || 0) - Number(a.checkins || 0))[0] ?? null;
+}
+
 function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPie }) {
   const pick = makePicker(weekKey);
 
@@ -174,9 +166,9 @@ function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPi
   if (!Number.isFinite(moodAvg)) {
     s.push(
       pick([
-        "This week didn’t leave much of a mood trail — and that’s okay.",
-        "Quiet week on mood logs — no pressure.",
-        "Not much mood data this week, but we can still reflect gently.",
+        "There was not much mood data this week, and that is okay.",
+        "This week was quiet on mood logs. No pressure.",
+        "You did not leave much mood data this week, but we can still reflect gently.",
       ])
     );
   } else if (moodAvg >= 7.5) {
@@ -209,32 +201,32 @@ function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPi
   if (Number.isFinite(moodAvg) && moodCount > 0) {
     s.push(
       pick([
-        `Your average mood landed around ${moodAvg}/10.`,
-        `Mood average came out to about ${moodAvg}/10.`,
-        `Across your logs, mood averaged ${moodAvg}/10.`,
+        `Your average mood was about ${moodAvg}/10.`,
+        `Your mood average came out to around ${moodAvg}/10.`,
+        `Across your check-ins, your mood averaged ${moodAvg}/10.`,
       ])
     );
 
     if (trend === "up") {
       s.push(
         pick([
-          "It trended upward as the week went on — a soft lift.",
-          "Your mood gently climbed toward the end of the week.",
-          "There was a quiet upward drift in your mood.",
+          "Your mood improved as the week went on.",
+          "Your mood gently lifted toward the end of the week.",
+          "There was a small upward shift in your mood.",
         ])
       );
     } else if (trend === "down") {
       s.push(
         pick([
-          "It dipped as the days progressed — consider a softer pace.",
-          "Mood slid downward later in the week — you might need recovery time.",
-          "There was a downward pull near the end of the week.",
+          "Your mood got a little heavier as the days went on.",
+          "Your mood dropped later in the week, so you may need more recovery time.",
+          "The second half of the week looked a bit heavier than the first.",
         ])
       );
     } else if (trend === "steady") {
       s.push(
         pick([
-          "It stayed fairly consistent — gentle stability.",
+          "Your mood stayed fairly consistent.",
           "Mood held steady without big swings.",
           "Your mood line stayed relatively even.",
         ])
@@ -253,9 +245,9 @@ function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPi
   } else {
     s.push(
       pick([
-        "If you log even once or twice next week, patterns will start showing up.",
-        "A couple of mood logs next week will help this feel more personal.",
-        "Even a tiny check-in next week gives the chart more meaning.",
+        "If you log your mood once or twice next week, clearer patterns will start to show.",
+        "A couple of mood check-ins next week will make this feel more personal.",
+        "Even one small mood check-in next week will make this more useful.",
       ])
     );
   }
@@ -264,33 +256,33 @@ function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPi
   if (completion >= 80) {
     s.push(
       pick([
-        `You followed through on most of your tasks (${completion}%).`,
-        `Task completion was strong at ${completion}%.`,
-        `You showed real follow-through — ${completion}% completed.`,
+        `You followed through on most of your tasks at ${completion}%.`,
+        `Your task completion was strong at ${completion}%.`,
+        `You stayed consistent with your tasks and finished ${completion}%.`,
       ])
     );
   } else if (completion >= 55) {
     s.push(
       pick([
-        `You made steady progress on tasks (${completion}% done).`,
-        `Tasks moved forward at a steady pace (${completion}%).`,
-        `You kept things moving — ${completion}% completed.`,
+        `You made steady progress on tasks with ${completion}% completed.`,
+        `Your tasks moved forward at a steady pace this week.`,
+        `You kept things moving and completed ${completion}% of your tasks.`,
       ])
     );
   } else if (completion > 0) {
     s.push(
       pick([
-        `Tasks slowed down this week (${completion}% completed).`,
-        `You did what you could — completion was ${completion}%.`,
-        `Progress was lighter this week (${completion}%).`,
+        `Tasks felt slower this week, with ${completion}% completed.`,
+        `You did what you could, and task completion landed at ${completion}%.`,
+        `Progress was lighter this week, and that is okay.`,
       ])
     );
   } else {
     s.push(
       pick([
-        "Tasks were quiet this week — not every week is for output.",
-        "Task completion didn’t register this week — could be a reset week.",
-        "No tasks finished this week — maybe your focus was elsewhere.",
+        "Tasks were quiet this week. Not every week has to be about output.",
+        "No task completion showed up this week. This may have been a reset week.",
+        "No tasks were finished this week, so your energy may have been needed elsewhere.",
       ])
     );
   }
@@ -299,33 +291,33 @@ function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPi
   if (habitTotal >= 7) {
     s.push(
       pick([
-        "Habits were very consistent — small repetitions are stacking.",
-        "Your habit check-ins stayed strong — that’s quiet momentum.",
+        "Your habits were very consistent this week.",
+        "Your habit check-ins stayed strong, and that is quiet momentum.",
         "You showed up for your habits a lot this week.",
       ])
     );
   } else if (habitTotal >= 3) {
     s.push(
       pick([
-        "You kept a few habits going — that still counts.",
-        "Habits showed up a handful of times — good signal.",
-        "There’s a small consistency thread in your habits.",
+        "You kept a few habits going, and that still counts.",
+        "Your habits showed up a handful of times, which is a good sign.",
+        "There is a small thread of consistency in your habits.",
       ])
     );
   } else if (habitTotal > 0) {
     s.push(
       pick([
-        "Habits were light, but you still showed up at least once.",
-        "Even one habit check-in is proof you didn’t quit.",
+        "Your habits were light, but you still showed up at least once.",
+        "Even one habit check-in shows that you did not give up.",
         "A small habit check-in is still a win.",
       ])
     );
   } else {
     s.push(
       pick([
-        "Habits were quiet this week — consider choosing one easy anchor habit.",
-        "No habit check-ins logged — maybe keep it gentler next week.",
-        "No habit logs — a single tiny habit next week could change the feel.",
+        "Your habits were quiet this week, so one easy anchor habit may help next week.",
+        "No habit check-ins showed up, so it may help to make next week gentler.",
+        "No habits were logged this week. One tiny habit next week could change the feel.",
       ])
     );
   }
@@ -333,11 +325,11 @@ function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPi
   // 5) gentle close
   s.push(
     pick([
-      "Next week: keep it simple. One small habit + one meaningful task is enough.",
-      "If the week felt messy, don’t fix everything — just choose one gentle priority.",
-      "You’re building awareness, not perfection. That’s the real win.",
-      "Try a softer start next week, then build up once energy returns.",
-      "If you want, aim for one small “anchor” next week — something easy to keep.",
+      "Next week, keep it simple. One small habit and one meaningful task is enough.",
+      "If this week felt messy, you do not need to fix everything. Just choose one gentle priority.",
+      "You are building awareness, not perfection. That matters.",
+      "Try starting next week more softly, then build up if your energy returns.",
+      "If you want a simple reset, choose one small anchor habit that feels easy to keep.",
     ])
   );
 
@@ -345,106 +337,77 @@ function buildWeeklyInsight({ weekKey, moodStats, moodSeries, tasksBar, habitsPi
   return s.filter(Boolean).slice(0, 6).join(" ");
 }
 
-/* =========================
-   Cute tooltip
-========================= */
-function MoodTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
+function buildWeeklyHighlights({ moodStats, moodSeries, tasksBar, habitsPie }) {
+  const trend = getTrendLabel(moodSeries);
+  const peak = getPeakDay(moodSeries);
+  const low = getLowestDay(moodSeries);
+  const topHabit = getTopHabit(habitsPie);
+  const habitTotal = (habitsPie || []).reduce((a, h) => a + Number(h.checkins || 0), 0);
 
-  const moodPoint = payload.find((p) => p?.dataKey === "mood") ?? payload[0];
-  const v = moodPoint?.value;
-  const ymd = moodPoint?.payload?.ymd;
-  const isFuture = Boolean(moodPoint?.payload?.isFuture);
-  const isMissedPast = Boolean(moodPoint?.payload?.isMissedPast);
+  let headline = "A quieter week still teaches you something useful.";
+  if (tasksBar.percent >= 75 && Number.isFinite(moodStats.avg) && moodStats.avg >= 7) {
+    headline = "This week looked steady, capable, and emotionally lighter.";
+  } else if (tasksBar.percent >= 60 || habitTotal >= 5) {
+    headline = "There was meaningful momentum here, even if the week felt mixed.";
+  } else if (Number.isFinite(moodStats.avg) && moodStats.avg <= 5) {
+    headline = "This week looked heavier, so gentleness matters more than pressure.";
+  }
 
-  const mood = Number.isFinite(Number(v)) ? Number(v) : null;
+  const strengths = [];
+  if (tasksBar.percent >= 60) strengths.push(`You completed ${tasksBar.percent}% of your tasks, which suggests decent follow-through.`);
+  if (topHabit && Number(topHabit.checkins || 0) > 0) strengths.push(`${topHabit.name} was your strongest habit anchor with ${topHabit.checkins} check-in${Number(topHabit.checkins) === 1 ? "" : "s"}.`);
+  if (peak) strengths.push(`${peak.day} looked like your brightest day emotionally.`);
+  if (!strengths.length) strengths.push("You still showed up enough to leave useful signals for next week.");
 
+  const watchouts = [];
+  if (trend === "down") watchouts.push("Your mood trended downward across the week, so the back half may have been heavier than the start.");
+  if (tasksBar.created > 0 && tasksBar.percent < 45) watchouts.push("A lot of tasks stayed open, which may be a sign that your weekly load is still a bit high.");
+  if (habitTotal === 0) watchouts.push("No habits were checked in, so your routine anchors may be too hard to reach right now.");
+  if (low) watchouts.push(`${low.day} may have been a lower-energy day worth remembering when you plan next week.`);
+  if (!watchouts.length) watchouts.push("Nothing looks especially alarming here. The main opportunity is consistency, not correction.");
+
+  let nextStep = "Next week, keep one small task and one easy habit visible so momentum starts earlier.";
+  if (trend === "down") nextStep = "Next week, front-load easier wins early and protect your energy later in the week.";
+  else if (tasksBar.percent < 45) nextStep = "Try trimming your weekly task load a little and define one clearer priority each day.";
+  else if (habitTotal === 0) nextStep = "Pick one very easy anchor habit for next week, something you can do even on low-energy days.";
+  else if (topHabit) nextStep = `Build around ${topHabit.name} again next week, since it already looks like a habit your rhythm supports.`;
+
+  const focus = tasksBar.percent >= 60
+    ? "Keep your task list clear and limited so follow-through stays sustainable."
+    : "Reduce weekly load and make your next important task easier to start.";
+  const protect = trend === "down"
+    ? "Protect the second half of your week a little more, since your energy seemed to dip there."
+    : "Protect the rhythm that already worked instead of changing too much at once.";
+  const keep = topHabit
+    ? `Keep ${topHabit.name} visible, because it already looks like a habit your week can support.`
+    : "Keep one tiny anchor habit visible so the week has somewhere gentle to restart.";
+  const confidence = moodStats.count >= 4 ? "solid" : moodStats.count >= 2 ? "light" : "early";
+
+  return {
+    headline,
+    strengths,
+    watchouts,
+    nextStep,
+    focus,
+    protect,
+    keep,
+    confidence,
+  };
+}
+
+function EmptyInsightsState() {
   return (
-    <div className="rounded-2xl border border-black/10 bg-white/90 px-3 py-2 text-xs shadow-sm backdrop-blur">
-      <div className="text-stone-900 font-medium">{label}</div>
-      <div className="text-stone-500">{ymd}</div>
-      <div className="mt-1 text-stone-800">
-        {mood != null ? (
-          <>
-            Mood: <span className="font-semibold">{mood}/10</span>
-          </>
-        ) : isFuture ? (
-          <>Future day</>
-        ) : isMissedPast ? (
-          <>Missed mood log</>
-        ) : (
-          <>No mood log</>
-        )}
+    <div className="rounded-2xl border border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,0.84),rgba(240,247,242,0.9))] p-5">
+      <div className="text-sm font-medium text-stone-900">Insights get warmer and smarter once you leave a few signals.</div>
+      <p className="mt-1 text-sm text-stone-600">
+        Try logging one reflection, checking in one habit, or finishing one task this week. Even a small amount of data is enough to start spotting a pattern.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <span className="rounded-full border border-emerald-200 bg-emerald-50/70 px-3 py-1 text-emerald-900">1 reflection</span>
+        <span className="rounded-full border border-sky-200 bg-sky-50/70 px-3 py-1 text-sky-900">1 completed task</span>
+        <span className="rounded-full border border-violet-200 bg-violet-50/70 px-3 py-1 text-violet-900">1 habit check-in</span>
       </div>
     </div>
-  );
-}
-
-/* =========================
-   Hollow dots like SaaS charts
-========================= */
-function MoodDot({ cx, cy, payload, stroke }) {
-  if (!payload || payload.mood == null) return null;
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={4.5}
-      fill="#fff"
-      stroke={stroke || "rgba(0,0,0,0.25)"}
-      strokeWidth={2}
-    />
-  );
-}
-
-function MoodActiveDot({ cx, cy, stroke }) {
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={7}
-      fill="#fff"
-      stroke={stroke || "rgba(0,0,0,0.35)"}
-      strokeWidth={2.5}
-      style={{ filter: "drop-shadow(0px 6px 10px rgba(0,0,0,0.10))" }}
-    />
-  );
-}
-
-function MissingMoodDot({ cx, cy, payload, onPickDate }) {
-  if (!payload || !payload.isMissedPast) return null;
-  return (
-    <g
-      onClick={() => onPickDate?.(payload.ymd)}
-      style={{ cursor: "pointer" }}
-      aria-label={`Backfill mood for ${payload.day}`}
-    >
-      <circle
-        cx={cx}
-        cy={cy}
-        r={5}
-        fill="#fff"
-        stroke="rgba(120,120,120,0.45)"
-        strokeWidth={1.5}
-        strokeDasharray="3 2"
-      />
-      <line x1={cx - 2.2} y1={cy} x2={cx + 2.2} y2={cy} stroke="rgba(120,120,120,0.45)" strokeWidth={1.2} />
-      <line x1={cx} y1={cy - 2.2} x2={cx} y2={cy + 2.2} stroke="rgba(120,120,120,0.45)" strokeWidth={1.2} />
-    </g>
-  );
-}
-
-function FutureMoodDot({ cx, cy, payload }) {
-  if (!payload || !payload.isFuture) return null;
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={4.2}
-      fill="rgba(148,163,184,0.14)"
-      stroke="rgba(100,116,139,0.35)"
-      strokeWidth={1.3}
-    />
   );
 }
 
@@ -647,6 +610,17 @@ export default function AnalyticsPage() {
     });
   }, [data?.week?.start, weeklyMoodStats, weeklyMoodSeries, tasksBar, habitsPie]);
 
+  const weeklyHighlights = useMemo(
+    () =>
+      buildWeeklyHighlights({
+        moodStats: weeklyMoodStats,
+        moodSeries: weeklyMoodSeries,
+        tasksBar,
+        habitsPie,
+      }),
+    [habitsPie, tasksBar, weeklyMoodSeries, weeklyMoodStats]
+  );
+
   const moodTaskCorrelation = useMemo(() => {
     if (!Number.isFinite(weeklyMoodStats.avg)) return "Not enough mood data to compare with tasks yet.";
     if (weeklyMoodStats.count < 3) return "Too few mood logs this week for a strong mood-task pattern.";
@@ -672,6 +646,12 @@ export default function AnalyticsPage() {
     return "Mood and habit consistency looked mixed this week.";
   }, [weeklyMoodStats.avg, weeklyMoodStats.count, habitsPie]);
 
+  const hasWeeklySignals =
+    weeklyMoodStats.count > 0 ||
+    tasksBar.created > 0 ||
+    tasksBar.completed > 0 ||
+    habitsPie.some((h) => Number(h.checkins || 0) > 0);
+
   if (loading) return <div className="text-stone-500">Loading gently...</div>;
 
   const week = data?.week;
@@ -679,7 +659,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-8">
-      <Section title="Analytics" subtitle="A soft recap of your week.">
+      <Section title="Analytics" subtitle="A soft recap of your week." icon={Icons.analytics}>
         {/* Week picker */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/5 bg-white/70 p-4">
           <div>
@@ -714,350 +694,39 @@ export default function AnalyticsPage() {
           {data?.gentleRecap ?? "A small recap will appear here."}
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          {/* Habits pie */}
-          <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-stone-900">Habits</div>
-              <div className="text-xs text-stone-500">Share of check-ins</div>
+        {!hasWeeklySignals ? <div className="mt-4"><EmptyInsightsState /></div> : null}
+
+        <Suspense
+          fallback={
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="h-72 rounded-2xl border border-black/5 bg-white/70 p-4 animate-pulse" />
+              <div className="h-72 rounded-2xl border border-black/5 bg-white/70 p-4 animate-pulse" />
+              <div className="h-80 rounded-2xl border border-black/5 bg-white/70 p-4 animate-pulse lg:col-span-2" />
             </div>
-
-            {habitsPie.length === 0 ? (
-              <div className="mt-3 rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
-                No habit check-ins tracked this week yet.
-              </div>
-            ) : (
-              <div className="mt-3 grid gap-4 sm:grid-cols-2 items-center">
-                <div className="h-52">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={habitsPie}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={55}
-                        outerRadius={85}
-                        paddingAngle={2}
-                        isAnimationActive={true}
-                        label={false}
-                      >
-                        {habitsPie.map((_, idx) => (
-                          <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="space-y-2">
-                  {habitsPie.map((h, idx) => (
-                    <div key={h.name} className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className="h-3 w-3 rounded-full border border-white/60"
-                          style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
-                        />
-                        <div className="text-sm text-stone-800 truncate">{h.name}</div>
-                      </div>
-                      <div className="text-xs text-stone-500">{h.checkins}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Tasks */}
-          <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-stone-900">Tasks</div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50/70 px-2 py-1 text-emerald-900">
-                    Created: <span className="font-semibold">{tasksBar.created}</span>
-                  </span>
-                  <span className="rounded-full border border-sky-200 bg-sky-50/70 px-2 py-1 text-sky-900">
-                    Completed: <span className="font-semibold">{tasksBar.completed}</span>
-                  </span>
-                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
-                    Completion: <span className="font-semibold text-stone-900">{tasksBar.percent}%</span>
-                  </span>
-                </div>
-              </div>
-              <div className="text-[11px] text-stone-500">This week</div>
-            </div>
-
-            <div className="mt-3 grid grid-cols-3 gap-3">
-              <div className="rounded-2xl border border-black/5 bg-emerald-50 p-3 transition hover:-translate-y-[1px] hover:shadow-sm">
-                <div className="text-xs text-emerald-800">Created</div>
-                <div className="mt-1 text-lg font-semibold text-emerald-900">{tasksBar.created}</div>
-              </div>
-
-              <div className="rounded-2xl border border-black/5 bg-sky-50 p-3 transition hover:-translate-y-[1px] hover:shadow-sm">
-                <div className="text-xs text-sky-800">Completed</div>
-                <div className="mt-1 text-lg font-semibold text-sky-900">{tasksBar.completed}</div>
-              </div>
-
-              <div className="rounded-2xl border border-black/5 bg-rose-50 p-3 transition hover:-translate-y-[1px] hover:shadow-sm">
-                <div className="text-xs text-rose-800">Overdue</div>
-                <div className="mt-1 text-lg font-semibold text-rose-900">
-                  {Number(data?.tasks?.overdueEndOfWeek ?? 0)}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <div className="flex items-center justify-between text-xs text-stone-600">
-                <span>Completion rate</span>
-                <span
-                  className={`text-stone-700 font-medium inline-flex items-center gap-1 transition ${
-                    pulse ? "scale-[1.06]" : "scale-100"
-                  }`}
-                >
-                  {tasksBar.percent}% {pulse ? <span className="text-[11px]">✨</span> : null}
-                </span>
-              </div>
-
-              <div className="mt-2 h-3 rounded-full bg-stone-100 overflow-hidden border border-black/5">
-                <div
-                  className={`h-full rounded-full transition-[width] duration-700 ease-out ${
-                    pulse ? "brightness-[1.03]" : ""
-                  }`}
-                  style={{
-                    width: `${tasksBar.percent}%`,
-                    background: "linear-gradient(90deg, #DFF5E6, #D9F0FF, #EFE4FF, #FFE0EB)",
-                  }}
-                />
-              </div>
-
-              <div className="mt-2 text-xs text-stone-500">
-                {tasksBar.created > 0
-                  ? `${tasksBar.completed} of ${tasksBar.created} finished`
-                  : "No tasks created this week yet."}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom row */}
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {/* 🌈 Mood Trend */}
-          <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-stone-900">Mood trend</div>
-                <div className="mt-2 inline-flex max-w-full overflow-x-auto rounded-full border border-black/10 bg-white/80 p-0.5 text-[11px]">
-                  {[
-                    { key: "7d", label: "7d" },
-                    { key: "30d", label: "30d" },
-                  ].map((r) => (
-                    <button
-                      key={r.key}
-                      type="button"
-                      onClick={() => setMoodRange(r.key)}
-                      className={[
-                        "rounded-full px-2.5 py-1 transition",
-                        moodRange === r.key
-                          ? "bg-emerald-50 text-emerald-900 border border-emerald-200"
-                          : "text-stone-600 hover:bg-stone-100",
-                      ].join(" ")}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
-                    Logged: <span className="font-semibold text-stone-900">{moodStats.count}</span>
-                  </span>
-                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
-                    Avg: <span className="font-semibold text-stone-900">{moodStats.avg ?? "—"}</span>
-                  </span>
-                  <span className="rounded-full border border-amber-200 bg-amber-50/70 px-2 py-1 text-amber-900">
-                    Missed: <span className="font-semibold">{missingMoodDays.length}</span>
-                  </span>
-                </div>
-              </div>
-              <div className="text-[11px] text-stone-500">
-                {moodRange === "7d" ? "Last 7 days" : "Last 30 days"}
-              </div>
-            </div>
-
-            <div className="mt-3 h-44 sm:h-40 rounded-2xl border border-black/10 bg-white/60 p-2">
-              {moodSeries.every((d) => d.mood == null) ? (
-                <div className="h-full flex items-center justify-center text-sm text-stone-500">
-                  No mood logs yet — add one in Reflections 🌿
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={moodSeriesForChart} margin={{ top: 14, right: 14, bottom: 6, left: 0 }}>
-                    <defs>
-                      {/* pastel gradient line */}
-                      <linearGradient id="moodLine" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#BEE3F8" />
-                        <stop offset="55%" stopColor="#C4B5FD" />
-                        <stop offset="100%" stopColor="#FBCFE8" />
-                      </linearGradient>
-
-                      {/* pastel area gradient */}
-                      <linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#BFDBFE" stopOpacity="0.62" />
-                        <stop offset="45%" stopColor="#C4B5FD" stopOpacity="0.44" />
-                        <stop offset="100%" stopColor="#FBCFE8" stopOpacity="0.20" />
-                      </linearGradient>
-                    </defs>
-
-                    {/* minimal horizontal grid like the reference */}
-                    <CartesianGrid vertical={false} stroke="rgba(0,0,0,0.05)" />
-
-                    <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis domain={[0, 10]} hide />
-
-                    <Tooltip content={<MoodTooltip />} cursor={{ stroke: "rgba(0,0,0,0.06)" }} />
-
-                    {/* area */}
-                    <Area
-                      type="monotone"
-                      dataKey="mood"
-                      stroke="none"
-                      fill="url(#moodFill)"
-                      fillOpacity={1}
-                      connectNulls={false}
-                      baseValue={0}
-                      isAnimationActive={true}
-                    />
-
-                    {/* missed-day markers (click to backfill) */}
-                    <Line
-                      type="linear"
-                      dataKey="missingMarker"
-                      stroke="none"
-                      dot={<MissingMoodDot onPickDate={goToBackfill} />}
-                      activeDot={false}
-                      isAnimationActive={false}
-                    />
-
-                    {/* future-day markers */}
-                    <Line
-                      type="linear"
-                      dataKey="futureMarker"
-                      stroke="none"
-                      dot={<FutureMoodDot />}
-                      activeDot={false}
-                      isAnimationActive={false}
-                    />
-
-                    {/* gradient line + hollow dots */}
-                    <Line
-                      type="monotone"
-                      dataKey="mood"
-                      connectNulls={false}
-                      stroke="url(#moodLine)"
-                      strokeWidth={3}
-                      dot={<MoodDot />}
-                      activeDot={<MoodActiveDot />}
-                      isAnimationActive={true}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="mt-2 text-[11px] text-stone-500">
-              Trend window ends on <span className="font-medium text-stone-700">{moodTrendEndYMD}</span>{" "}
-              ({week?.timeZone ?? "timezone unknown"}).
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-stone-500">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full border border-violet-300 bg-white" />
-                Logged
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full border border-stone-400 border-dashed bg-white" />
-                Missed (past)
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full border border-slate-400/60 bg-slate-200/60" />
-                Future ({futureMoodDays.length})
-              </span>
-            </div>
-
-            {missingMoodDays.length > 0 ? (
-              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3">
-                <div className="text-xs text-amber-900">
-                  Missed mood check-ins. Tap a day to backfill:
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {missingMoodDays.map((d) => (
-                    <button
-                      key={d.ymd}
-                      type="button"
-                      onClick={() => goToBackfill(d.ymd)}
-                      className="rounded-full border border-amber-300 bg-white/80 px-2.5 py-1 text-[11px] text-amber-900 hover:bg-white"
-                    >
-                      {d.day}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {moodStats.count < 3 ? (
-              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
-                Sparse mood data in this range ({moodStats.count} logs). Treat trend readouts as directional only.
-              </div>
-            ) : null}
-
-            <div className="mt-3 rounded-2xl bg-stone-50/70 p-3 text-sm text-stone-700">
-              {moodStats.insight}
-            </div>
-          </div>
-
-          {/* ✨ Weekly Insight (replaces Notifications) */}
-          <div className="rounded-2xl border border-black/5 bg-white/70 p-4 transition hover:-translate-y-[1px] hover:shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-stone-900">Weekly insight</div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
-                    Mood avg: <span className="font-semibold text-stone-900">{weeklyMoodStats.avg ?? "—"}</span>
-                  </span>
-                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
-                    Tasks: <span className="font-semibold text-stone-900">{tasksBar.percent}%</span>
-                  </span>
-                  <span className="rounded-full border border-black/5 bg-white/80 px-2 py-1 text-stone-700">
-                    Habit check-ins:{" "}
-                    <span className="font-semibold text-stone-900">
-                      {habitsPie.reduce((a, h) => a + Number(h.checkins || 0), 0)}
-                    </span>
-                  </span>
-                </div>
-              </div>
-              <div className="text-[11px] text-stone-500">This week ✨</div>
-            </div>
-
-            <div className="mt-3 rounded-2xl bg-stone-50/70 p-3 text-sm text-stone-700 leading-relaxed">
-              {weeklyInsight}
-            </div>
-
-            <div className="mt-3 grid gap-2">
-              <div className="rounded-2xl border border-black/5 bg-white/80 p-3 text-xs text-stone-700">
-                <span className="font-medium text-stone-900">Mood × Tasks:</span> {moodTaskCorrelation}
-              </div>
-              <div className="rounded-2xl border border-black/5 bg-white/80 p-3 text-xs text-stone-700">
-                <span className="font-medium text-stone-900">Mood × Habits:</span> {moodHabitCorrelation}
-              </div>
-            </div>
-
-            {weeklyMoodStats.count < 3 ? (
-              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
-                Weekly insight is based on sparse mood logs ({weeklyMoodStats.count} this week), so interpretation is
-                conservative.
-              </div>
-            ) : null}
-          </div>
-        </div>
+          }
+        >
+          <AnalyticsCharts
+            habitsPie={habitsPie}
+            tasksBar={tasksBar}
+            data={data}
+            pulse={pulse}
+            moodRange={moodRange}
+            setMoodRange={setMoodRange}
+            moodStats={moodStats}
+            missingMoodDays={missingMoodDays}
+            futureMoodDays={futureMoodDays}
+            moodSeries={moodSeries}
+            moodSeriesForChart={moodSeriesForChart}
+            goToBackfill={goToBackfill}
+            moodTrendEndYMD={moodTrendEndYMD}
+            week={week}
+            weeklyMoodStats={weeklyMoodStats}
+            weeklyInsight={weeklyInsight}
+            weeklyHighlights={weeklyHighlights}
+            moodTaskCorrelation={moodTaskCorrelation}
+            moodHabitCorrelation={moodHabitCorrelation}
+          />
+        </Suspense>
       </Section>
     </div>
   );

@@ -51,6 +51,17 @@ export async function list(req: Request, res: Response) {
   return res.json({ reflections });
 }
 
+export async function removeAll(req: Request, res: Response) {
+  const userId = (req.user as any).id as number;
+
+  if (req.query.all !== "true") {
+    return res.status(400).json({ error: "Set all=true to delete all reflections." });
+  }
+
+  const deleted = await service.deleteAllReflections(userId);
+  return res.json({ ok: true, deleted });
+}
+
 export async function getByDate(req: Request, res: Response) {
   const userId = (req.user as any).id as number;
   const raw = req.params.date;

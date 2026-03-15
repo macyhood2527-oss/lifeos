@@ -7,12 +7,14 @@ import { createApp } from "./app";
 import { env } from "./config/env";
 import { pool } from "./db/pool";
 import { startReminderScheduler } from "./scheduler/reminderScheduler";
+import { ensureUserPreferenceColumns } from "./modules/users/users.service";
 
 let schedulerStarted = false;
 
 async function main() {
   // quick DB ping on startup
   await pool.query("SELECT 1");
+  await ensureUserPreferenceColumns();
 
   const app = createApp();
 

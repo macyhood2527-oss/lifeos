@@ -11,18 +11,26 @@ function Section({ title, children }) {
 
 export default function FaqsPage() {
   const updated = "March 2026";
+  const quickLinks = [
+    { label: "Today", text: "Your calm daily view" },
+    { label: "Habits", text: "Track steady routines" },
+    { label: "Tasks", text: "Manage what needs doing" },
+    { label: "Reflect", text: "Log mood and notes" },
+    { label: "Insights", text: "Review weekly patterns" },
+    { label: "Reminders", text: "Manage gentle nudges" },
+  ];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-4xl space-y-4">
       <div className="rounded-3xl border border-black/5 bg-white/55 backdrop-blur p-6 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="inline-flex items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50/70 px-3 py-1 text-xs text-sky-900">
-              ❓ FAQs
+              FAQ
             </div>
-            <h1 className="mt-3 text-xl font-semibold text-stone-900">How To Use LifeOS</h1>
+            <h1 className="mt-3 text-xl font-semibold text-stone-900">Questions About LifeOS</h1>
             <p className="mt-1 text-sm text-stone-600">
-              A simple walkthrough so you know what to expect in each tab.
+              A simple guide to how LifeOS works, what each area is for, and what to do when something feels off.
             </p>
             <p className="mt-2 text-xs text-stone-500">Last updated: {updated}</p>
           </div>
@@ -36,90 +44,124 @@ export default function FaqsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4">
-        <Section title="What Should I See In Today?">
+      <div className="rounded-3xl border border-black/5 bg-white/45 backdrop-blur p-5 shadow-sm">
+        <div className="text-sm font-semibold text-stone-900">Quick tour</div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {quickLinks.map((item) => (
+            <div key={item.label} className="rounded-2xl border border-black/5 bg-white/70 px-4 py-3">
+              <div className="text-sm font-medium text-stone-900">{item.label}</div>
+              <div className="mt-1 text-xs text-stone-500">{item.text}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="What is LifeOS for?">
           <p>
-            The Today tab is your quick dashboard. You should see:
+            LifeOS is for calm personal organization. It brings together habits, tasks, reflections,
+            reminders, and weekly insights in one place without making the experience feel harsh or noisy.
+          </p>
+        </Section>
+
+        <Section title="What should I use first?">
+          <p>
+            Start with the Today page. It gives you the clearest picture of what matters right now:
+            your tasks, your habits, your reminders, and your reflection space for the day.
+          </p>
+        </Section>
+
+        <Section title="What should I see in Today?">
+          <p>
+            The Today page is your daily reset point. You should usually see:
           </p>
           <ol className="mt-2 list-decimal pl-5 space-y-1">
-            <li>A short daily summary and progress bars.</li>
-            <li>Soft Signals (notification controls).</li>
-            <li>Habits check-ins for the day.</li>
-            <li>Your top tasks and quick add composer.</li>
-            <li>Today reflection (collapsed if already logged).</li>
+            <li>A short summary of the day.</li>
+            <li>Gentle reminders that are due now or later today.</li>
+            <li>Your habits in a quick check-in format.</li>
+            <li>Your top tasks and a quick task composer.</li>
+            <li>Your reflection area for the day.</li>
           </ol>
         </Section>
 
-        <Section title="How Do I Add And Use Habits?">
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Go to Habits tab.</li>
-            <li>Enter a habit name, choose cadence (daily or weekly), set target.</li>
-            <li>Click Add habit.</li>
-            <li>Use Check in to increment progress.</li>
-            <li>
-              Habits are grouped in Check in view:
-              Due now (0 progress), In progress (partial), Completed (target reached).
-            </li>
-          </ol>
+        <Section title="How do habits work?">
+          <p>
+            Habits are meant to be small repeatable actions. You can create a daily or weekly habit,
+            set a target, and check in whenever you make progress. On the Habits page you get the full
+            management view. On Today you get a lighter version just for quick check-ins.
+          </p>
         </Section>
 
-        <Section title="How Do I Add And Manage Tasks?">
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Go to Tasks tab and add a task from the composer.</li>
-            <li>Use Details to set due date, priority, and notes.</li>
-            <li>Use Done or Undo to move task state.</li>
-            <li>Use quick filters (Due today, Overdue, No due date) for focus.</li>
-          </ol>
+        <Section title="How do tasks work?">
+          <p>
+            Tasks are for things that need to get done, whether today or later. You can add a title,
+            due date, priority, and notes. The Tasks page is your fuller planning area, while Today only
+            shows the top slice of what needs attention.
+          </p>
         </Section>
 
-        <Section title="How Do Reflections Work?">
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Open Reflections and pick a date on the calendar.</li>
-            <li>Fill mood and prompts (gratitude, highlights, challenges, notes).</li>
-            <li>Save to log that specific date.</li>
-            <li>Use Recent section to jump between older entries quickly.</li>
-          </ol>
+        <Section title="How do reflections work?">
+          <p>
+            Reflections let you log mood, gratitude, highlights, challenges, and notes. You can write
+            for today or choose another date from the calendar. Over time, these reflections help make
+            the weekly insights feel more personal and more honest.
+          </p>
         </Section>
 
-        <Section title="How Do I Read Analytics?">
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Use week controls to navigate previous and next weeks.</li>
-            <li>Use mood range switch (7d or 30d) in Mood trend.</li>
-            <li>Missed mood markers only count past days, not future days.</li>
-            <li>Weekly insight combines mood, tasks, and habits gently.</li>
-            <li>Sparse-data labels appear when logs are too few.</li>
-          </ol>
+        <Section title="What are reminders vs notifications?">
+          <p>
+            A reminder is the schedule itself, like reminding you about a habit at 9:00 AM. A notification
+            is the actual delivery to your device. Reminders are managed in the Reminders area. Notification
+            permissions and device setup live in Settings.
+          </p>
         </Section>
 
-        <Section title="How Do Notifications Work?">
-          <ol className="list-decimal pl-5 space-y-1">
-            <li>Enable browser permission first.</li>
-            <li>Turn on notifications in Soft Signals or Settings.</li>
-            <li>Use Test button to verify delivery.</li>
-            <li>Quiet hours and timezone are respected when configured.</li>
-          </ol>
+        <Section title="How do reminders work?">
+          <p>
+            You can attach reminders to habits and tasks. They can be active, paused, tested, or marked
+            handled for today. The Reminders page gives you the full overview, while Today only shows
+            what matters right now.
+          </p>
         </Section>
 
-        <Section title="What Is In Settings?">
+        <Section title="How do weekly insights work?">
+          <p>
+            Insights combine your mood logs, task completion, and habit consistency into a weekly view.
+            They are meant to be warm and honest, not overly dramatic. If you have very little data,
+            the app will keep the interpretation lighter and more cautious.
+          </p>
+        </Section>
+
+        <Section title="What can I change in Settings?">
           <ul className="list-disc pl-5 space-y-1">
-            <li>Profile and timezone preferences.</li>
-            <li>Notification preference toggles.</li>
-            <li>Data export as JSON.</li>
-            <li>Account deletion request flow (manual safety process).</li>
+            <li>Your name and timezone.</li>
+            <li>Theme mood and density preferences.</li>
+            <li>Notification preferences and delivery setup.</li>
+            <li>Data export and import.</li>
+            <li>Reminder management shortcut.</li>
           </ul>
         </Section>
 
-        <Section title="What If Something Looks Wrong?">
+        <Section title="Can I back up my data?">
+          <p>
+            Yes. In Settings, you can export your LifeOS data as JSON. You can also import a LifeOS JSON
+            backup later. Import currently replaces your existing tasks, habits, reflections, and reminders
+            with what is in that file.
+          </p>
+        </Section>
+
+        <Section title="What if something feels slow or wrong?">
           <ul className="list-disc pl-5 space-y-1">
-            <li>Try Refresh in Notifications or reload the page.</li>
-            <li>If updates don’t appear, restart API/web dev servers.</li>
-            <li>If timezone feels off, verify your profile timezone in Settings.</li>
+            <li>Reload the page once to rule out a stale client state.</li>
+            <li>Check your timezone in Settings if dates feel off.</li>
+            <li>If reminders or login fail in local development, make sure both web and API servers are running.</li>
+            <li>If the app still feels slow, the bottleneck may be your API or database connection rather than the page UI.</li>
           </ul>
         </Section>
       </div>
 
       <div className="rounded-3xl border border-black/5 bg-white/40 backdrop-blur px-5 py-4 text-xs text-stone-500">
-        LifeOS is designed for calm progress. Start small, stay consistent, and keep it gentle 🌷
+        LifeOS is designed for calm progress. Start small, stay honest, and let the app support your pace.
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import Section from "../../shared/ui/Section";
 import ReflectionComposer from "./components/ReflectionComposer";
 import { getTodayReflection } from "../today/today.api";
 import { listReflections, upsertReflectionByDate } from "./reflections.api";
+import { Icons } from "../../config/icons";
 
 /* =========================
    Glass wrapper (since main panel removed)
@@ -12,6 +14,22 @@ function GlassPanel({ children }) {
   return (
     <div className="rounded-3xl border border-black/5 bg-white/55 shadow-sm backdrop-blur-md">
       <div className="p-5">{children}</div>
+    </div>
+  );
+}
+
+function EmptyReflectionState() {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,0.84),rgba(245,241,255,0.88))] p-5">
+      <div className="text-sm font-medium text-stone-900">Your reflection history starts with one honest note.</div>
+      <p className="mt-1 text-sm text-stone-600">
+        You do not need a perfect journal entry. A mood, one bright spot, or one hard thing is already enough to begin seeing patterns.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <span className="rounded-full border border-violet-200 bg-violet-50/70 px-3 py-1 text-violet-900">Start with mood only</span>
+        <span className="rounded-full border border-emerald-200 bg-emerald-50/70 px-3 py-1 text-emerald-900">One sentence is enough</span>
+        <span className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-stone-700">Insights get better over time</span>
+      </div>
     </div>
   );
 }
@@ -150,13 +168,10 @@ function isYMD(value) {
 }
 
 export default function ReflectionsPage() {
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const queryDate = searchParams.get("date");
   const initialYMD = isYMD(queryDate) ? queryDate : ymdLocal(new Date());
-
-  const [loading, setLoading] = useState(true);
-  const [today, setToday] = useState(null);
-  const [all, setAll] = useState([]);
 
   const [viewDate, setViewDate] = useState(() => {
     const d = new Date(initialYMD + "T00:00:00");
@@ -164,30 +179,15 @@ export default function ReflectionsPage() {
   });
   const [selectedYMD, setSelectedYMD] = useState(initialYMD);
   const [showAllRecent, setShowAllRecent] = useState(false);
-
-  async function load() {
-    const [t, list] = await Promise.all([
-      getTodayReflection(),
-      listReflections({ limit: 120 }),
-    ]);
-
-    setToday(t ?? null);
-    setAll(Array.isArray(list) ? list : []);
-  }
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        await load();
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const [todayQuery, allQuery] = useQueries({
+    queries: [
+      { queryKey: ["reflection", "today"], queryFn: () => getTodayReflection() },
+      { queryKey: ["reflections", "list"], queryFn: () => listReflections({ limit: 120 }) },
+    ],
+  });
+  const loading = todayQuery.isLoading || allQuery.isLoading;
+  const today = todayQuery.data ?? null;
+  const all = allQuery.data ?? [];
 
   useEffect(() => {
     if (!isYMD(queryDate)) return;
@@ -277,10 +277,12 @@ export default function ReflectionsPage() {
 
   if (loading) return <div className="text-stone-500">Loading gently...</div>;
 
+  const hasAnyReflections = Array.isArray(all) && all.length > 0;
+
   return (
     <div className="space-y-8">
       <GlassPanel>
-        <Section title="Reflections" subtitle="Browse your days without clutter.">
+        <Section title="Reflections" subtitle="Browse your days without clutter." icon={Icons.reflections}>
           <div className="mb-4 grid gap-2 sm:grid-cols-3">
             <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
               <div className="text-[11px] text-stone-500">Entries this month</div>
@@ -405,7 +407,7 @@ export default function ReflectionsPage() {
                   <div className="mt-1 text-xs text-stone-500">
                     {selected
                       ? `Updated: ${String(selected.updated_at ?? "").slice(0, 19)}`
-                      : "No reflection yet."}
+                      : "No reflection yet for this day."}
                   </div>
                 </div>
 
@@ -421,6 +423,7 @@ export default function ReflectionsPage() {
               </div>
 
               <div className="mt-3 space-y-3">
+                {!hasAnyReflections && !selected ? <EmptyReflectionState /> : null}
                 {!isTodaySelected ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                     You are editing <span className="font-medium">{selectedYMD}</span>. Saving will
@@ -435,7 +438,12 @@ export default function ReflectionsPage() {
                       ? undefined
                       : (payload) => upsertReflectionByDate(selectedYMD, payload)
                   }
-                  onSaved={load}
+                  onSaved={() =>
+                    Promise.all([
+                      queryClient.invalidateQueries({ queryKey: ["reflection", "today"] }),
+                      queryClient.invalidateQueries({ queryKey: ["reflections", "list"] }),
+                    ])
+                  }
                 />
               </div>
             </div>
@@ -445,6 +453,7 @@ export default function ReflectionsPage() {
           <div className="mt-4 rounded-2xl border border-black/5 bg-white/55 p-4 backdrop-blur-sm">
             <div className="text-sm font-medium text-stone-900">Recent</div>
             <div className="mt-2 space-y-3">
+              {!hasAnyReflections ? <EmptyReflectionState /> : null}
               {recentGrouped.map((g) => (
                 <div key={g.key} className="space-y-2">
                   <div className="sticky top-0 z-10 inline-flex rounded-full border border-black/10 bg-white/90 px-2.5 py-1 text-[11px] text-stone-600 backdrop-blur">

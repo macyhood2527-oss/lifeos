@@ -13,6 +13,9 @@ export type UserRow = RowDataPacket & {
   tone: "gentle" | "neutral" | "direct";
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
+  reminders_enabled: number;
+  habit_nudges_enabled: number;
+  weekly_recap_enabled: number;
   created_at: string;
   updated_at: string;
 };
@@ -27,9 +30,44 @@ const USER_PUBLIC_COLUMNS = `
   tone,
   quiet_hours_start,
   quiet_hours_end,
+  reminders_enabled,
+  habit_nudges_enabled,
+  weekly_recap_enabled,
   created_at,
   updated_at
 `;
+
+export async function ensureUserPreferenceColumns() {
+  const [rows] = await pool.query<
+    (RowDataPacket & { COLUMN_NAME: string })[]
+  >(
+    `
+    SELECT COLUMN_NAME
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'users'
+      AND COLUMN_NAME IN ('reminders_enabled', 'habit_nudges_enabled', 'weekly_recap_enabled')
+    `
+  );
+
+  const existing = new Set(rows.map((row) => row.COLUMN_NAME));
+
+  if (!existing.has("reminders_enabled")) {
+    await pool.execute(
+      `ALTER TABLE users ADD COLUMN reminders_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER quiet_hours_end`
+    );
+  }
+  if (!existing.has("habit_nudges_enabled")) {
+    await pool.execute(
+      `ALTER TABLE users ADD COLUMN habit_nudges_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER reminders_enabled`
+    );
+  }
+  if (!existing.has("weekly_recap_enabled")) {
+    await pool.execute(
+      `ALTER TABLE users ADD COLUMN weekly_recap_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER habit_nudges_enabled`
+    );
+  }
+}
 
 export async function findUserById(userId: number) {
   const [rows] = await pool.query<UserRow[]>(
@@ -70,8 +108,8 @@ export async function createLocalUser(input: {
 
   const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO users
-      (google_id, email, password_hash, name, avatar_url, timezone, tone, quiet_hours_start, quiet_hours_end, created_at, updated_at)
-     VALUES (?, ?, ?, ?, NULL, 'Asia/Manila', 'gentle', NULL, NULL, NOW(3), NOW(3))`,
+      (google_id, email, password_hash, name, avatar_url, timezone, tone, quiet_hours_start, quiet_hours_end, reminders_enabled, habit_nudges_enabled, weekly_recap_enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, NULL, 'Asia/Manila', 'gentle', NULL, NULL, 1, 1, 1, NOW(3), NOW(3))`,
     [localGoogleId, input.email, input.passwordHash, input.name]
   );
 
@@ -92,6 +130,9 @@ export async function updateUserProfileById(
   patch: Partial<{
     name: string;
     timezone: string;
+    reminders_enabled: boolean;
+    habit_nudges_enabled: boolean;
+    weekly_recap_enabled: boolean;
   }>
 ) {
   const fields: string[] = [];
@@ -104,6 +145,18 @@ export async function updateUserProfileById(
   if (patch.timezone !== undefined) {
     fields.push("timezone=?");
     values.push(patch.timezone);
+  }
+  if (patch.reminders_enabled !== undefined) {
+    fields.push("reminders_enabled=?");
+    values.push(patch.reminders_enabled ? 1 : 0);
+  }
+  if (patch.habit_nudges_enabled !== undefined) {
+    fields.push("habit_nudges_enabled=?");
+    values.push(patch.habit_nudges_enabled ? 1 : 0);
+  }
+  if (patch.weekly_recap_enabled !== undefined) {
+    fields.push("weekly_recap_enabled=?");
+    values.push(patch.weekly_recap_enabled ? 1 : 0);
   }
 
   if (fields.length === 0) {
@@ -129,9 +182,12 @@ export async function getUserSettings(userId: number) {
       tone: "gentle" | "neutral" | "direct";
       quiet_hours_start: string | null;
       quiet_hours_end: string | null;
+      reminders_enabled: number;
+      habit_nudges_enabled: number;
+      weekly_recap_enabled: number;
     })[]
   >(
-    `SELECT id, timezone, tone, quiet_hours_start, quiet_hours_end
+    `SELECT id, timezone, tone, quiet_hours_start, quiet_hours_end, reminders_enabled, habit_nudges_enabled, weekly_recap_enabled
      FROM users
      WHERE id=?
      LIMIT 1`,
@@ -172,8 +228,8 @@ export async function findOrCreateUserFromGoogle(input: {
   // 3) Create
   const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO users
-      (google_id, email, name, avatar_url, timezone, tone, quiet_hours_start, quiet_hours_end, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'Asia/Manila', 'gentle', NULL, NULL, NOW(3), NOW(3))`,
+      (google_id, email, name, avatar_url, timezone, tone, quiet_hours_start, quiet_hours_end, reminders_enabled, habit_nudges_enabled, weekly_recap_enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'Asia/Manila', 'gentle', NULL, NULL, 1, 1, 1, NOW(3), NOW(3))`,
     [input.googleId, input.email, input.name, input.avatarUrl]
   );
 

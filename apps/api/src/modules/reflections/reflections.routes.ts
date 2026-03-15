@@ -13,5 +13,6 @@ reflectionsRouter.put("/:date", asyncHandler(controller.upsertByDate));
 
 // ✅ ADD THIS (list endpoint) — NOTE: must be BEFORE "/:date"
 reflectionsRouter.get("/", asyncHandler(controller.list));
+reflectionsRouter.delete("/", asyncHandler(controller.removeAll));
 
 reflectionsRouter.get("/:date", asyncHandler(controller.getByDate));

@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { CreateProjectSchema, UpdateProjectSchema } from "./projects.schemas";
-import { createProject, listProjects, updateProject, archiveProject, getProjectById } from "./projects.service";
+import { createProject, listProjects, updateProject, archiveProject, getProjectById, hardDeleteAllProjects } from "./projects.service";
 
 export async function create(req: Request, res: Response) {
   const userId = (req.user as any).id as number;
@@ -38,6 +38,17 @@ export async function patch(req: Request, res: Response) {
 
   if (!project) return res.status(404).json({ error: "Project not found" });
   return res.json({ project });
+}
+
+export async function removeAll(req: Request, res: Response) {
+  const userId = (req.user as any).id as number;
+
+  if (req.query.all !== "true" || req.query.hard !== "true") {
+    return res.status(400).json({ error: "Set all=true&hard=true to permanently delete all projects." });
+  }
+
+  const deleted = await hardDeleteAllProjects(userId);
+  return res.json({ ok: true, deleted });
 }
 
 export async function remove(req: Request, res: Response) {

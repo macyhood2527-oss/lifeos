@@ -1,13 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import Section from "../../shared/ui/Section";
 import TaskComposer from "./components/TaskComposer";
 import TaskList from "./components/TaskList";
-import { listTodayTasks } from "./tasks.api";
+import { listTasks, listTodayTasks } from "./tasks.api";
+import { Icons } from "../../config/icons";
 
 function GlassPanel({ children }) {
   return (
     <div className="rounded-3xl border border-black/5 bg-white/55 shadow-sm backdrop-blur-md">
       <div className="p-5">{children}</div>
+    </div>
+  );
+}
+
+function EmptyTasksState() {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,0.85),rgba(245,247,240,0.9))] p-5">
+      <div className="text-sm font-medium text-stone-900">A clear day starts small.</div>
+      <p className="mt-1 text-sm text-stone-600">
+        If your list is empty, that can be a gift. Add one task that would make today feel lighter or more complete.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <span className="rounded-full border border-emerald-200 bg-emerald-50/70 px-3 py-1 text-emerald-900">Start with one 10-minute task</span>
+        <span className="rounded-full border border-sky-200 bg-sky-50/70 px-3 py-1 text-sky-900">Keep it specific</span>
+        <span className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-stone-700">You can always add more later</span>
+      </div>
     </div>
   );
 }
@@ -21,23 +40,15 @@ function ymdLocalToday() {
 }
 
 export default function TasksPage() {
-  const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState([]);
-
-  async function load() {
-    const data = await listTodayTasks();
-    setTasks(data ?? []);
-  }
-
-  useEffect(() => {
-    (async () => {
-      try {
-        await load();
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const [searchParams] = useSearchParams();
+  const focusedTaskId = searchParams.get("item");
+  const openReminder = searchParams.get("reminder") === "1";
+  const tasksQuery = useQuery({
+    queryKey: ["tasks", focusedTaskId ? "all" : "today"],
+    queryFn: () => (focusedTaskId ? listTasks({ includeDone: true }) : listTodayTasks()),
+  });
+  const tasks = tasksQuery.data ?? [];
+  const load = useCallback(() => tasksQuery.refetch(), [tasksQuery]);
 
   const taskStats = useMemo(() => {
     const list = Array.isArray(tasks) ? tasks : [];
@@ -54,12 +65,18 @@ export default function TasksPage() {
     return { total, done, todo, overdue, completion };
   }, [tasks]);
 
-  if (loading) return <div className="text-stone-500">Loading gently...</div>;
+  if (tasksQuery.isLoading) return <div className="text-stone-500">Loading gently...</div>;
 
   return (
     <div className="space-y-8">
       <GlassPanel>
-        <Section title="Tasks" subtitle="One clear next step is enough.">
+        <Section title="Tasks" subtitle="One clear next step is enough." icon={Icons.tasks}>
+          {focusedTaskId ? (
+            <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
+              Focused from reminders. You’re seeing your full task list so the linked task is easy to find.
+            </div>
+          ) : null}
+
           <div className="mb-4 grid gap-2 sm:grid-cols-4">
             <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
               <div className="text-[11px] text-stone-500">Todo</div>
@@ -83,11 +100,15 @@ export default function TasksPage() {
 
           <div className="mt-3">
             {Array.isArray(tasks) && tasks.length > 0 ? (
-              <TaskList tasks={tasks} onUpdated={load} />
+              <TaskList
+                tasks={tasks}
+                onUpdated={load}
+                initialOpenId={focusedTaskId}
+                highlightTaskId={focusedTaskId}
+                autoOpenReminderForId={openReminder ? focusedTaskId : null}
+              />
             ) : (
-              <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
-                Nothing here yet. Add one gentle task for today.
-              </div>
+              <EmptyTasksState />
             )}
           </div>
         </Section>

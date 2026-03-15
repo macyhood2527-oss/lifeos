@@ -8,6 +8,8 @@ habitsRouter.use(requireAuth);
 
 habitsRouter.post("/", asyncHandler(controller.create));
 habitsRouter.get("/", asyncHandler(controller.list));
+habitsRouter.get("/checkins/export", asyncHandler(controller.listCheckins));
+habitsRouter.delete("/", asyncHandler(controller.removeAll));
 habitsRouter.patch("/:id", asyncHandler(controller.patch));
 habitsRouter.delete("/:id", asyncHandler(controller.remove));
 

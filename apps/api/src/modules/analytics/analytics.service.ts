@@ -117,36 +117,93 @@ export async function getWeeklyAnalytics(userId: number, opts?: { weekStart?: st
   const startDT = dtStart(startDate);
   const endExclusiveDT = dtStart(endExclusiveDate);
 
-  // ---------- TASKS ----------
-  const [[createdRow]] = await pool.query<CountRow[]>(
-    `SELECT COUNT(*) as count
-     FROM tasks
-     WHERE user_id=?
-       AND created_at >= ?
-       AND created_at < ?`,
-    [userId, startDT, endExclusiveDT]
-  );
+  const [
+    createdRows,
+    completedRows,
+    overdueRows,
+    habitRowsResult,
+    refCountRows,
+    avgMoodRows,
+    statusRowsResult,
+  ] = await Promise.all([
+    pool.query<CountRow[]>(
+      `SELECT COUNT(*) as count
+       FROM tasks
+       WHERE user_id=?
+         AND created_at >= ?
+         AND created_at < ?`,
+      [userId, startDT, endExclusiveDT]
+    ),
+    pool.query<CountRow[]>(
+      `SELECT COUNT(*) as count
+       FROM tasks
+       WHERE user_id=?
+         AND completed_at IS NOT NULL
+         AND completed_at >= ?
+         AND completed_at < ?`,
+      [userId, startDT, endExclusiveDT]
+    ),
+    pool.query<CountRow[]>(
+      `SELECT COUNT(*) as count
+       FROM tasks
+       WHERE user_id=?
+         AND status <> 'done'
+         AND due_date IS NOT NULL
+         AND due_date <= ?`,
+      [userId, endDate]
+    ),
+    pool.query<HabitWeeklyRow[]>(
+      `
+      SELECT
+        h.id as habit_id,
+        h.name,
+        h.cadence,
+        h.target_per_period,
+        COALESCE(SUM(c.value), 0) as checkins
+      FROM habits h
+      LEFT JOIN habit_checkins c
+        ON c.habit_id = h.id
+       AND c.user_id = h.user_id
+       AND c.checkin_date >= ?
+       AND c.checkin_date <= ?
+      WHERE h.user_id = ?
+        AND h.active = 1
+      GROUP BY h.id, h.name, h.cadence, h.target_per_period
+      ORDER BY h.sort_order ASC, h.created_at DESC
+      `,
+      [startDate, endDate, userId]
+    ),
+    pool.query<CountRow[]>(
+      `SELECT COUNT(*) as count
+       FROM reflections
+       WHERE user_id=?
+         AND reflect_date >= ?
+         AND reflect_date <= ?`,
+      [userId, startDate, endDate]
+    ),
+    pool.query<(RowDataPacket & { avgMood: number | null })[]>(
+      `SELECT AVG(mood) as avgMood
+       FROM reflections
+       WHERE user_id=?
+         AND reflect_date >= ?
+         AND reflect_date <= ?
+         AND mood IS NOT NULL`,
+      [userId, startDate, endDate]
+    ),
+    pool.query<StatusCountsRow[]>(
+      `SELECT status, COUNT(*) as count
+       FROM notification_log
+       WHERE user_id=?
+         AND sent_at >= ?
+         AND sent_at < ?
+       GROUP BY status`,
+      [userId, startDT, endExclusiveDT]
+    ),
+  ]);
 
-  const [[completedRow]] = await pool.query<CountRow[]>(
-    `SELECT COUNT(*) as count
-     FROM tasks
-     WHERE user_id=?
-       AND completed_at IS NOT NULL
-       AND completed_at >= ?
-       AND completed_at < ?`,
-    [userId, startDT, endExclusiveDT]
-  );
-
-  // overdue "as of end of week": due_date <= endDate and not done
-  const [[overdueRow]] = await pool.query<CountRow[]>(
-    `SELECT COUNT(*) as count
-     FROM tasks
-     WHERE user_id=?
-       AND status <> 'done'
-       AND due_date IS NOT NULL
-       AND due_date <= ?`,
-    [userId, endDate]
-  );
+  const [createdRow] = createdRows[0];
+  const [completedRow] = completedRows[0];
+  const [overdueRow] = overdueRows[0];
 
   const tasks = {
     created: Number(createdRow?.count ?? 0),
@@ -154,28 +211,7 @@ export async function getWeeklyAnalytics(userId: number, opts?: { weekStart?: st
     overdueEndOfWeek: Number(overdueRow?.count ?? 0),
   };
 
-  // ---------- HABITS ----------
-  const [habitRows] = await pool.query<HabitWeeklyRow[]>(
-    `
-    SELECT
-      h.id as habit_id,
-      h.name,
-      h.cadence,
-      h.target_per_period,
-      COALESCE(SUM(c.value), 0) as checkins
-    FROM habits h
-    LEFT JOIN habit_checkins c
-      ON c.habit_id = h.id
-     AND c.user_id = h.user_id
-     AND c.checkin_date >= ?
-     AND c.checkin_date <= ?
-    WHERE h.user_id = ?
-      AND h.active = 1
-    GROUP BY h.id, h.name, h.cadence, h.target_per_period
-    ORDER BY h.sort_order ASC, h.created_at DESC
-    `,
-    [startDate, endDate, userId]
-  );
+  const [habitRows] = habitRowsResult;
 
   const habits = habitRows.map((h) => {
     const weeklyTarget =
@@ -195,41 +231,15 @@ export async function getWeeklyAnalytics(userId: number, opts?: { weekStart?: st
     };
   });
 
-  // ---------- REFLECTIONS ----------
-  const [[refCountRow]] = await pool.query<CountRow[]>(
-    `SELECT COUNT(*) as count
-     FROM reflections
-     WHERE user_id=?
-       AND reflect_date >= ?
-       AND reflect_date <= ?`,
-    [userId, startDate, endDate]
-  );
-
-  const [[avgMoodRow]] = await pool.query<(RowDataPacket & { avgMood: number | null })[]>(
-    `SELECT AVG(mood) as avgMood
-     FROM reflections
-     WHERE user_id=?
-       AND reflect_date >= ?
-       AND reflect_date <= ?
-       AND mood IS NOT NULL`,
-    [userId, startDate, endDate]
-  );
+  const [refCountRow] = refCountRows[0];
+  const [avgMoodRow] = avgMoodRows[0];
 
   const reflections = {
     count: Number(refCountRow?.count ?? 0),
     avgMood: avgMoodRow?.avgMood === null || avgMoodRow?.avgMood === undefined ? null : Number(avgMoodRow.avgMood),
   };
 
-  // ---------- PUSH / NOTIFICATIONS ----------
-  const [statusRows] = await pool.query<StatusCountsRow[]>(
-    `SELECT status, COUNT(*) as count
-     FROM notification_log
-     WHERE user_id=?
-       AND sent_at >= ?
-       AND sent_at < ?
-     GROUP BY status`,
-    [userId, startDT, endExclusiveDT]
-  );
+  const [statusRows] = statusRowsResult;
 
   const push = { sent: 0, failed: 0, skipped: 0 };
   for (const r of statusRows) {
@@ -254,4 +264,3 @@ export async function getWeeklyAnalytics(userId: number, opts?: { weekStart?: st
     gentleRecap,
   };
 }
-

@@ -82,3 +82,12 @@ export async function listReflections(
 
   return rows;
 }
+
+export async function deleteAllReflections(userId: number) {
+  const [result] = await pool.execute<ResultSetHeader>(
+    `DELETE FROM reflections WHERE user_id=?`,
+    [userId]
+  );
+
+  return result.affectedRows;
+}

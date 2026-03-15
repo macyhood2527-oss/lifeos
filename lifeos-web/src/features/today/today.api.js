@@ -37,3 +37,8 @@ export async function getTodayReflection() {
   if (data && typeof data === "object" && data.reflection) return data.reflection;
   return data ?? null;
 }
+
+export async function getReminders() {
+  const data = await apiFetch("/api/reminders");
+  return asArray(data, "reminders");
+}

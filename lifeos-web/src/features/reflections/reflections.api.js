@@ -25,3 +25,8 @@ export async function listReflections({ limit = 120, offset = 0 } = {}) {
   const data = await apiFetch(`/api/reflections?limit=${limit}&offset=${offset}`);
   return data?.reflections ?? [];
 }
+
+export async function deleteAllReflections() {
+  const data = await apiFetch("/api/reflections?all=true", { method: "DELETE" });
+  return Number(data?.deleted ?? 0);
+}

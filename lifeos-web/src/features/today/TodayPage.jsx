@@ -1,36 +1,62 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import HabitList from "../habits/components/HabitList";
 import TaskComposer from "../tasks/components/TaskComposer";
 import TaskList from "../tasks/components/TaskList";
 import ReflectionComposer from "../reflections/components/ReflectionComposer";
-import NotificationsCard from "../notifications/NotificationsCard";
+import {
+  handleReminderToday,
+  notifyRemindersChanged,
+  sendReminderNow,
+  updateReminder,
+} from "../reminders/reminders.api";
+import ReminderActionCard from "../reminders/components/ReminderActionCard";
+import { enrichReminder } from "../reminders/reminders.utils";
 
 import {
   getWeeklyAnalytics,
   getTodayTasks,
   getHabits,
   getTodayReflection,
+  getReminders,
 } from "./today.api";
+import { Icons } from "../../config/icons";
 
-function GlassPanel({ title, subtitle, children, rightSlot }) {
+function GlassPanel({ title, subtitle, children, rightSlot, icon: Icon }) {
   return (
     <section className="rounded-3xl border border-black/5 bg-white/55 shadow-sm backdrop-blur-md">
-      <div className="px-5 pt-5">
-        <div className="flex items-start justify-between gap-4">
+      <div className="px-4 pt-4 sm:px-5 sm:pt-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-stone-900">{title}</h2>
+            <div className="flex items-center gap-2">
+              {Icon ? <Icon size={18} strokeWidth={1.75} className="text-inherit opacity-85" /> : null}
+              <h2 className="text-base font-semibold text-stone-900">{title}</h2>
+            </div>
             {subtitle ? (
-              <p className="mt-1 text-sm text-stone-600">{subtitle}</p>
+              <p className="mt-1 max-w-xl text-sm leading-relaxed text-stone-600">{subtitle}</p>
             ) : null}
           </div>
-          {rightSlot ? <div className="shrink-0">{rightSlot}</div> : null}
+          {rightSlot ? <div className="min-w-0 sm:shrink-0">{rightSlot}</div> : null}
         </div>
 
         <div className="mt-4 h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
       </div>
 
-      <div className="p-5">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </section>
+  );
+}
+
+function LoadingCard({ lines = 3 }) {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-white/60 p-4">
+      <div className="animate-pulse space-y-2">
+        {Array.from({ length: lines }).map((_, idx) => (
+          <div key={idx} className="h-3 rounded-full bg-stone-200/80" />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -53,72 +79,78 @@ function pickDailyMessage(messages, seedKey) {
 }
 
 export default function TodayPage() {
-  const [loading, setLoading] = useState(true);
   const [reflectionOpen, setReflectionOpen] = useState(true);
+  const [remindersReady, setRemindersReady] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== "undefined" ? Notification.permission : "default"
+  );
+  const [reminderActionId, setReminderActionId] = useState(null);
+  const [reminderToast, setReminderToast] = useState(null);
+  const queryClient = useQueryClient();
+  const [tasksQuery, habitsQuery, reflectionQuery, weeklyQuery, remindersQuery] = useQueries({
+    queries: [
+      { queryKey: ["tasks", "today"], queryFn: () => getTodayTasks() },
+      { queryKey: ["habits", "active"], queryFn: () => getHabits() },
+      { queryKey: ["reflection", "today"], queryFn: () => getTodayReflection() },
+      { queryKey: ["analytics", "weekly"], queryFn: () => getWeeklyAnalytics() },
+      {
+        queryKey: ["reminders", "list"],
+        queryFn: () => getReminders(),
+        enabled: remindersReady,
+        staleTime: 2 * 60_000,
+      },
+    ],
+  });
+  const tasks = tasksQuery.data ?? [];
+  const habits = habitsQuery.data ?? [];
+  const reflection = reflectionQuery.data ?? null;
+  const weekly = weeklyQuery.data ?? null;
+  const reminders = remindersQuery.data ?? [];
+  const loading =
+    tasksQuery.isLoading ||
+    habitsQuery.isLoading ||
+    reflectionQuery.isLoading ||
+    weeklyQuery.isLoading;
+  const summaryError = weeklyQuery.isError ? "Summary couldn't load right now." : null;
+  const habitsError = habitsQuery.isError ? "Habits couldn't load right now." : null;
+  const tasksError = tasksQuery.isError ? "Tasks couldn't load right now." : null;
+  const reflectionError = reflectionQuery.isError ? "Reflection couldn't load right now." : null;
+  const remindersError = remindersQuery.isError ? "Reminders couldn't load right now." : null;
+  const reload = useCallback(
+    () =>
+      Promise.all([
+        tasksQuery.refetch(),
+        habitsQuery.refetch(),
+        reflectionQuery.refetch(),
+        weeklyQuery.refetch(),
+        remindersReady ? remindersQuery.refetch() : Promise.resolve(remindersQuery),
+      ]),
+    [habitsQuery, reflectionQuery, remindersQuery, remindersReady, tasksQuery, weeklyQuery]
+  );
 
-  const [summaryError, setSummaryError] = useState(null);
-  const [habitsError, setHabitsError] = useState(null);
-  const [tasksError, setTasksError] = useState(null);
-  const [reflectionError, setReflectionError] = useState(null);
-
-  const [tasks, setTasks] = useState([]);
-  const [habits, setHabits] = useState([]);
-  const [reflection, setReflection] = useState(null);
-  const [weekly, setWeekly] = useState(null);
-
-  const reload = useCallback(async () => {
-    setSummaryError(null);
-    setHabitsError(null);
-    setTasksError(null);
-    setReflectionError(null);
-
-    const results = await Promise.allSettled([
-      getTodayTasks(),
-      getHabits(),
-      getTodayReflection(),
-      getWeeklyAnalytics(),
-    ]);
-
-    if (results[0].status === "fulfilled") setTasks(results[0].value ?? []);
-    else {
-      console.error("getTodayTasks failed:", results[0].reason);
-      setTasks([]);
-      setTasksError("Tasks couldn't load right now.");
-    }
-
-    if (results[1].status === "fulfilled") setHabits(results[1].value ?? []);
-    else {
-      console.error("getHabits failed:", results[1].reason);
-      setHabits([]);
-      setHabitsError("Habits couldn't load right now.");
-    }
-
-    if (results[2].status === "fulfilled")
-      setReflection(results[2].value ?? null);
-    else {
-      console.error("getTodayReflection failed:", results[2].reason);
-      setReflection(null);
-      setReflectionError("Reflection couldn't load right now.");
-    }
-
-    if (results[3].status === "fulfilled") setWeekly(results[3].value ?? null);
-    else {
-      console.error("getWeeklyAnalytics failed:", results[3].reason);
-      setWeekly(null);
-      setSummaryError("Summary couldn't load right now.");
-    }
+  useEffect(() => {
+    if (typeof Notification === "undefined") return;
+    setNotificationPermission(Notification.permission);
   }, []);
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      await reload();
-      if (alive) setLoading(false);
-    })();
-    return () => {
-      alive = false;
+    const timer = window.setTimeout(() => setRemindersReady(true), 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const onRemindersChanged = () => {
+      if (remindersReady) remindersQuery.refetch();
     };
-  }, [reload]);
+    window.addEventListener("lifeos-reminders-changed", onRemindersChanged);
+    return () => window.removeEventListener("lifeos-reminders-changed", onRemindersChanged);
+  }, [remindersQuery, remindersReady]);
+
+  useEffect(() => {
+    if (!reminderToast) return;
+    const t = setTimeout(() => setReminderToast(null), 2200);
+    return () => clearTimeout(t);
+  }, [reminderToast]);
 
   const topTasks = useMemo(() => {
     const rank = { high: 0, medium: 1, low: 2 };
@@ -231,8 +263,115 @@ export default function TodayPage() {
     return pickDailyMessage(fallbackMessages, seedKey);
   }, [fallbackMessages, tasks.length, habits.length]);
 
+  const reminderEntityMap = useMemo(() => {
+    const taskMap = new Map();
+    const habitMap = new Map();
+
+    for (const task of Array.isArray(tasks) ? tasks : []) {
+      taskMap.set(Number(task.id), task);
+    }
+    for (const habit of Array.isArray(habits) ? habits : []) {
+      habitMap.set(Number(habit.id), habit);
+    }
+
+    return { taskMap, habitMap };
+  }, [habits, tasks]);
+
+  const todayReminderGroups = useMemo(() => {
+    const dueNow = [];
+    const laterToday = [];
+    const now = Date.now();
+    const todayKey = new Date().toDateString();
+
+    for (const reminder of Array.isArray(reminders) ? reminders : []) {
+      if (Number(reminder?.enabled) === 0) continue;
+
+      const rawWhen = reminder?.next_run_at ?? reminder?.due_at;
+      if (!rawWhen) continue;
+
+      const when = new Date(rawWhen);
+      if (Number.isNaN(when.getTime())) continue;
+      if (when.toDateString() !== todayKey) continue;
+
+      const enriched = enrichReminder(reminder, reminderEntityMap);
+      const datedReminder = {
+        ...enriched,
+        when,
+      };
+
+      if (when.getTime() <= now) dueNow.push(datedReminder);
+      else laterToday.push(datedReminder);
+    }
+
+    dueNow.sort((a, b) => a.when.getTime() - b.when.getTime());
+    laterToday.sort((a, b) => a.when.getTime() - b.when.getTime());
+    return { dueNow, laterToday };
+  }, [reminderEntityMap, reminders]);
+
+  const remindersTodayCount = todayReminderGroups.dueNow.length + todayReminderGroups.laterToday.length;
+  const notificationStatusLabel =
+    notificationPermission === "granted"
+      ? "Notifications on"
+      : notificationPermission === "denied"
+      ? "Notifications blocked"
+      : "Notifications not set";
+  const notificationStatusTone =
+    notificationPermission === "granted"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : notificationPermission === "denied"
+      ? "border-rose-200 bg-rose-50 text-rose-800"
+      : "border-stone-200 bg-stone-50 text-stone-700";
+
+  async function handleReminderToggle(reminder) {
+    try {
+      setReminderActionId(reminder.id);
+      const next = await updateReminder(reminder.id, {
+        enabled: Number(reminder.enabled) === 0,
+      });
+      queryClient.setQueryData(["reminders", "list"], (current = []) =>
+        current.map((item) => (item.id === next.id ? next : item))
+      );
+      notifyRemindersChanged();
+      setReminderToast(
+        Number(reminder.enabled) === 0 ? "Reminder resumed." : "Reminder paused."
+      );
+    } catch {
+      setReminderToast("Couldn’t update reminder.");
+    } finally {
+      setReminderActionId(null);
+    }
+  }
+
+  async function handleReminderTest(reminder) {
+    try {
+      setReminderActionId(reminder.id);
+      await sendReminderNow(reminder.id);
+      setReminderToast("Test reminder requested.");
+    } catch {
+      setReminderToast("Couldn’t send test reminder.");
+    } finally {
+      setReminderActionId(null);
+    }
+  }
+
+  async function handleReminderDone(reminder) {
+    try {
+      setReminderActionId(reminder.id);
+      const next = await handleReminderToday(reminder.id);
+      queryClient.setQueryData(["reminders", "list"], (current = []) =>
+        current.map((item) => (item.id === next.id ? next : item))
+      );
+      notifyRemindersChanged();
+      setReminderToast("Handled for today.");
+    } catch {
+      setReminderToast("Couldn’t mark reminder handled.");
+    } finally {
+      setReminderActionId(null);
+    }
+  }
+
   // ✅ Replace plain text loader with your branded loader
-  if (loading) {
+  if (loading && !tasks.length && !habits.length && !reflection && !weekly && !reminders.length) {
     return (
       <div className="rounded-3xl border border-black/5 bg-white/55 p-5 text-sm text-stone-600 shadow-sm backdrop-blur-md">
         Loading gently…
@@ -242,12 +381,21 @@ export default function TodayPage() {
 
   return (
     <div className="space-y-8">
+      {reminderToast ? (
+        <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2">
+          <div className="rounded-2xl border border-emerald-200 bg-white/90 px-4 py-2 text-xs text-emerald-800 shadow-sm backdrop-blur">
+            {reminderToast}
+          </div>
+        </div>
+      ) : null}
+
       {/* 🌿 Today Summary */}
       <GlassPanel
         title="Today"
+        icon={Icons.dashboard}
         subtitle={`${tasks.length} tasks • ${habits.length} habits`}
         rightSlot={
-          <span className="rounded-2xl border border-black/10 bg-white/70 px-3 py-2 text-xs text-stone-600">
+          <span className="inline-flex rounded-2xl border border-black/10 bg-white/70 px-3 py-2 text-xs text-stone-600">
             calm pace ✿
           </span>
         }
@@ -262,9 +410,9 @@ export default function TodayPage() {
             <div className="mt-1 text-sm font-semibold text-stone-900">{habitStats.left}</div>
           </div>
           <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
-            <div className="text-[11px] text-stone-500">Mood</div>
+            <div className="text-[11px] text-stone-500">Reminders today</div>
             <div className="mt-1 text-sm font-semibold text-stone-900">
-              {reflectionLogged ? "Logged" : "Pending"}
+              {remindersTodayCount}
             </div>
           </div>
         </div>
@@ -324,17 +472,117 @@ export default function TodayPage() {
         </div>
       </GlassPanel>
 
-      {/* 🔔 Soft Signals */}
       <GlassPanel
-        title="Soft Signals"
-        subtitle="Personalize how LifeOS checks in with you."
+        title="Gentle Reminders"
+        icon={Icons.manifestations}
+        subtitle="What needs a nudge today, without making the day feel noisy."
+        rightSlot={
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <span
+              className={[
+                "rounded-full border px-2.5 py-1 text-[11px] whitespace-nowrap",
+                notificationStatusTone,
+              ].join(" ")}
+            >
+              {notificationStatusLabel}
+            </span>
+            <Link
+              to="/settings"
+              className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-xs text-stone-700 hover:bg-stone-50 whitespace-nowrap"
+            >
+              Manage notifications
+            </Link>
+            <Link
+              to="/reminders"
+              className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-xs text-stone-700 hover:bg-stone-50 whitespace-nowrap"
+            >
+              View all
+            </Link>
+          </div>
+        }
       >
-        <NotificationsCard />
+        {!remindersReady || (remindersQuery.isLoading && remindersTodayCount === 0) ? (
+          <LoadingCard lines={4} />
+        ) : remindersError ? (
+          <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
+            {remindersError}
+          </div>
+        ) : remindersTodayCount === 0 ? (
+          <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
+            Nothing is scheduled to nudge you today. Quiet is allowed too.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-900">
+                  Due now
+                </div>
+                <span className="rounded-full border border-amber-200 bg-white/70 px-2 py-0.5 text-[10px] text-amber-900">
+                  {todayReminderGroups.dueNow.length}
+                </span>
+              </div>
+
+              {todayReminderGroups.dueNow.length === 0 ? (
+                <div className="rounded-2xl bg-white/60 p-3 text-sm text-stone-600">
+                  Nothing due right this moment.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {todayReminderGroups.dueNow.map((reminder) => (
+                    <ReminderActionCard
+                      key={reminder.id}
+                      reminder={reminder}
+                      busy={reminderActionId === reminder.id}
+                      tone="amber"
+                      onHandledToday={handleReminderDone}
+                      onToggleEnabled={handleReminderToggle}
+                      onTestNow={handleReminderTest}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-sky-200 bg-sky-50/60 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wide text-sky-900">
+                  Later today
+                </div>
+                <span className="rounded-full border border-sky-200 bg-white/70 px-2 py-0.5 text-[10px] text-sky-900">
+                  {todayReminderGroups.laterToday.length}
+                </span>
+              </div>
+
+              {todayReminderGroups.laterToday.length === 0 ? (
+                <div className="rounded-2xl bg-white/60 p-3 text-sm text-stone-600">
+                  The rest of the day is quiet for now.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {todayReminderGroups.laterToday.map((reminder) => (
+                    <ReminderActionCard
+                      key={reminder.id}
+                      reminder={reminder}
+                      busy={reminderActionId === reminder.id}
+                      tone="sky"
+                      onHandledToday={handleReminderDone}
+                      onToggleEnabled={handleReminderToggle}
+                      onTestNow={handleReminderTest}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </GlassPanel>
 
       {/* 🌱 Habits */}
-      <GlassPanel title="Habits" subtitle="Small check-ins, steady progress.">
-        {habitsError ? (
+      <GlassPanel title="Habits" icon={Icons.habits} subtitle="Small check-ins, steady progress.">
+        {habitsQuery.isLoading && habits.length === 0 ? (
+          <LoadingCard lines={5} />
+        ) : habitsError ? (
           <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
             {habitsError}
           </div>
@@ -343,12 +591,24 @@ export default function TodayPage() {
             No habits yet. Start with one tiny daily ritual.
           </div>
         ) : (
-          <HabitList habits={habits} onCheckedIn={reload} />
+          <>
+            <HabitList habits={habits} onCheckedIn={reload} compact />
+            {habits.length > 4 ? (
+              <div className="mt-3 text-right">
+                <a
+                  href="/habits"
+                  className="inline-flex text-sm text-emerald-900 underline underline-offset-4"
+                >
+                  View all habits →
+                </a>
+              </div>
+            ) : null}
+          </>
         )}
       </GlassPanel>
 
       {/* 📋 Tasks */}
-      <GlassPanel title="Tasks" subtitle="One clear next step is enough.">
+      <GlassPanel title="Tasks" icon={Icons.tasks} subtitle="One clear next step is enough.">
         {tasksError && (
           <div className="mb-3 rounded-2xl bg-rose-50 p-4 text-sm text-rose-900">
             {tasksError}
@@ -356,14 +616,13 @@ export default function TodayPage() {
         )}
 
         <TaskComposer
-          onCreated={(newTask) => {
-            if (newTask) setTasks((prev) => [newTask, ...(prev ?? [])]);
-            return reload();
-          }}
+          onCreated={() => reload()}
         />
 
         <div className="mt-3">
-          {topTasks.length === 0 ? (
+          {tasksQuery.isLoading && topTasks.length === 0 ? (
+            <LoadingCard lines={4} />
+          ) : topTasks.length === 0 ? (
             <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
               Nothing scheduled for today. Add something gentle.
             </div>
@@ -376,7 +635,7 @@ export default function TodayPage() {
           <div className="mt-3 text-right">
             <a
               href="/tasks"
-              className="text-sm text-emerald-900 underline underline-offset-4"
+              className="inline-flex text-sm text-emerald-900 underline underline-offset-4"
             >
               View all tasks →
             </a>
@@ -387,6 +646,7 @@ export default function TodayPage() {
       {/* 🌸 Reflection */}
       <GlassPanel
         title="Reflection"
+        icon={Icons.reflections}
         subtitle="A gentle note for your future self."
         rightSlot={
           <button
@@ -404,7 +664,9 @@ export default function TodayPage() {
           </div>
         )}
 
-        {!reflectionOpen && reflectionLogged ? (
+        {reflectionQuery.isLoading && !reflection ? (
+          <LoadingCard lines={5} />
+        ) : !reflectionOpen && reflectionLogged ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">
             Reflection logged for today. Tap <span className="font-medium">Edit reflection</span> to update it.
           </div>

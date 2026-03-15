@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { checkinHabit } from "../habits.api";
+import ReminderEditor from "../../reminders/components/ReminderEditor";
 
 function getTarget(h) {
   return Number(h?.target_per_period ?? h?.target ?? 1) || 1;
@@ -28,8 +29,16 @@ function getCadenceLabel(h) {
   return "daily";
 }
 
-export default function HabitList({ habits, onCheckedIn }) {
+export default function HabitList({
+  habits,
+  onCheckedIn,
+  highlightHabitId = null,
+  autoOpenReminderForId = null,
+  compact = false,
+}) {
   const [busyId, setBusyId] = useState(null);
+  const cardRefs = useRef(new Map());
+  const [showCompleted, setShowCompleted] = useState(false);
 
   // Toast (gentle feedback)
   const [toast, setToast] = useState(null); // { message, tone }
@@ -76,13 +85,21 @@ export default function HabitList({ habits, onCheckedIn }) {
     [normalized]
   );
 
+  useEffect(() => {
+    if (!highlightHabitId) return;
+    const hid = String(highlightHabitId);
+    const el = cardRefs.current.get(hid);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightHabitId, normalized]);
+
   async function handleCheckin(habitId) {
     try {
       setBusyId(habitId);
       await checkinHabit(habitId);
       await onCheckedIn?.(habitId);
       showToast("Check-in saved", "ok");
-    } catch (e) {
+    } catch {
       showToast("Couldn’t check-in. Try again.", "warn");
     } finally {
       setBusyId(null);
@@ -122,13 +139,20 @@ export default function HabitList({ habits, onCheckedIn }) {
     const isBusy = busyId === h.id;
     const buttonLabel = h.done ? "Checked" : h.started ? "Add +1" : "Check in";
     const pct = Math.round((h.progress / Math.max(1, h.target)) * 100);
+    const isHighlighted = highlightHabitId != null && String(highlightHabitId) === String(h.id);
 
     return (
       <div
         key={h.id}
+        ref={(node) => {
+          const hid = String(h.id);
+          if (!node) cardRefs.current.delete(hid);
+          else cardRefs.current.set(hid, node);
+        }}
         className={[
           "relative flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between",
           "transition-transform duration-150 ease-out hover:-translate-y-[1px]",
+          isHighlighted ? "ring-2 ring-emerald-200 ring-offset-2 ring-offset-transparent" : "",
           h.done
             ? "border-emerald-200 bg-emerald-50/60"
             : h.started
@@ -181,6 +205,18 @@ export default function HabitList({ habits, onCheckedIn }) {
               }}
             />
           </div>
+
+          <div className="mt-3">
+            <ReminderEditor
+              entityType="habit"
+              entityId={h.id}
+              compact
+              title="Gentle reminder"
+              autoOpen={
+                autoOpenReminderForId != null && String(autoOpenReminderForId) === String(h.id)
+              }
+            />
+          </div>
         </div>
 
         <button
@@ -196,6 +232,68 @@ export default function HabitList({ habits, onCheckedIn }) {
           ].join(" ")}
         >
           {isBusy ? "Checking…" : buttonLabel}
+        </button>
+      </div>
+    );
+  }
+
+  function renderCompactHabitRow(h) {
+    const isBusy = busyId === h.id;
+    const isHighlighted = highlightHabitId != null && String(highlightHabitId) === String(h.id);
+    const toneClass = h.done
+      ? "border-emerald-200 bg-emerald-50/70 text-emerald-900"
+      : h.started
+      ? "border-sky-200 bg-sky-50/70 text-sky-900"
+      : "border-stone-200 bg-white/80 text-stone-700";
+
+    return (
+      <div
+        key={h.id}
+        ref={(node) => {
+          const hid = String(h.id);
+          if (!node) cardRefs.current.delete(hid);
+          else cardRefs.current.set(hid, node);
+        }}
+        className={[
+          "flex items-center gap-3 rounded-2xl border px-3 py-2.5",
+          isHighlighted ? "ring-2 ring-emerald-200 ring-offset-2 ring-offset-transparent" : "border-black/5",
+          h.done ? "bg-emerald-50/60" : "bg-white/70",
+        ].join(" ")}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className={["min-w-0 truncate text-sm font-medium", h.done ? "text-emerald-950" : "text-stone-900"].join(" ")}>
+              {h.name}
+            </div>
+            <span className={["shrink-0 rounded-full border px-2 py-0.5 text-[10px]", toneClass].join(" ")}>
+              {h.progress}/{h.target}
+            </span>
+          </div>
+          <div className="mt-0.5 text-[11px] text-stone-500">
+            {h.done ? "done today" : h.started ? "in progress" : `${h.cadence} habit`}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleCheckin(h.id)}
+          disabled={isBusy || h.done}
+          style={
+            h.done
+              ? undefined
+              : {
+                  backgroundImage:
+                    "linear-gradient(135deg, var(--lifeos-bg-from), var(--lifeos-bg-via))",
+                }
+          }
+          className={[
+            "shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-medium shadow-sm transition active:scale-[0.98] disabled:opacity-60",
+            h.done
+              ? "cursor-default border-emerald-200 bg-white/80 text-emerald-900"
+              : "border-black/10 bg-white/70 text-stone-800 hover:bg-white/85",
+          ].join(" ")}
+        >
+          {isBusy ? "Saving..." : h.done ? "Done" : h.started ? "+1" : "Check"}
         </button>
       </div>
     );
@@ -220,11 +318,43 @@ export default function HabitList({ habits, onCheckedIn }) {
         </div>
       ) : null}
 
-      <div className="space-y-4">
-        <SectionBlock title="Due now" tone="amber" items={dueNow} />
-        <SectionBlock title="In progress" tone="sky" items={inProgress} />
-        <SectionBlock title="Completed" tone="emerald" items={completed} />
-      </div>
+      {compact ? (
+        <div className="space-y-3">
+          {[...dueNow, ...inProgress].length === 0 ? (
+            <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
+              All clear for now.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {[...dueNow, ...inProgress].map((h) => renderCompactHabitRow(h))}
+            </div>
+          )}
+
+          {completed.length > 0 ? (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowCompleted((v) => !v)}
+                className="text-[11px] text-stone-500 underline underline-offset-4 hover:text-stone-700"
+              >
+                {showCompleted ? "Hide completed" : `Show completed (${completed.length})`}
+              </button>
+
+              {showCompleted ? (
+                <div className="mt-2 space-y-2">
+                  {completed.map((h) => renderCompactHabitRow(h))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <SectionBlock title="Due now" tone="amber" items={dueNow} />
+          <SectionBlock title="In progress" tone="sky" items={inProgress} />
+          <SectionBlock title="Completed" tone="emerald" items={completed} />
+        </div>
+      )}
     </div>
   );
 }

@@ -23,6 +23,15 @@ export function deleteHabit(habitId) {
   return apiFetch(`/api/habits/${habitId}`, { method: "DELETE" });
 }
 
+export function deleteAllHabits() {
+  return apiFetch("/api/habits?all=true&hard=true", { method: "DELETE" }).then((r) => Number(r?.deleted ?? 0));
+}
+
+export async function listHabitCheckinsForExport() {
+  const res = await apiFetch("/api/habits/checkins/export");
+  return res?.checkins ?? [];
+}
+
 // checkin stays same
 export function checkinHabit(habitId, payload = {}) {
   return apiFetch(`/api/habits/${habitId}/checkins`, {

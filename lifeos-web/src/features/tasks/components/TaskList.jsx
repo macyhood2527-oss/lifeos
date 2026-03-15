@@ -1,8 +1,15 @@
 // lifeos-web/src/features/tasks/components/TaskList.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { updateTask, deleteTask } from "../tasks.api";
+import ReminderEditor from "../../reminders/components/ReminderEditor";
 
-export default function TaskList({ tasks, onUpdated }) {
+export default function TaskList({
+  tasks,
+  onUpdated,
+  initialOpenId = null,
+  highlightTaskId = null,
+  autoOpenReminderForId = null,
+}) {
   const [busyId, setBusyId] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [draftById, setDraftById] = useState({});
@@ -16,6 +23,7 @@ export default function TaskList({ tasks, onUpdated }) {
   // Animation: mark tasks that just moved columns
   const [justMoved, setJustMoved] = useState({}); // { [tid]: "toDone" | "toTodo" }
   const moveTimersRef = useRef(new Map()); // tid -> timeout
+  const cardRefs = useRef(new Map());
 
   useEffect(() => {
     if (!toast) return;
@@ -31,7 +39,7 @@ export default function TaskList({ tasks, onUpdated }) {
     setConfirm(null);
   }
 
-  const list = Array.isArray(tasks) ? tasks : [];
+  const list = useMemo(() => (Array.isArray(tasks) ? tasks : []), [tasks]);
   const todayYMD = useMemo(() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -68,6 +76,30 @@ export default function TaskList({ tasks, onUpdated }) {
     for (const t of list) m.set(String(t.id), t);
     return m;
   }, [list]);
+
+  useEffect(() => {
+    if (!initialOpenId) return;
+    const tid = String(initialOpenId);
+    const task = taskById.get(tid);
+    if (!task) return;
+
+    setFilter("all");
+    if (task.status === "done") setDoneOpen(true);
+    setOpenId(tid);
+    setDraftById((prev) => {
+      if (prev[tid]) return prev;
+      return { ...prev, [tid]: ensureDraftFromTask(task) };
+    });
+  }, [initialOpenId, taskById]);
+
+  useEffect(() => {
+    if (!highlightTaskId) return;
+    const tid = String(highlightTaskId);
+    const el = cardRefs.current.get(tid);
+    if (!el) return;
+
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightTaskId, list, doneOpen]);
 
   if (!list.length) {
     return <div className="text-sm text-stone-500">No tasks today.</div>;
@@ -122,7 +154,7 @@ export default function TaskList({ tasks, onUpdated }) {
     timers.set(tid, tt);
   }
 
-  async function setStatus(taskId, status, opts = {}) {
+  async function setStatus(taskId, status) {
     const tid = String(taskId);
 
     // optimistic animation marker (UI-feel)
@@ -238,6 +270,7 @@ export default function TaskList({ tasks, onUpdated }) {
     const isDone = t.status === "done";
     const isOpen = openId === tid;
     const draft = getDraft(tid);
+    const isHighlighted = highlightTaskId != null && String(highlightTaskId) === tid;
 
     const moveClass =
       justMoved[tid] === "toDone"
@@ -249,10 +282,15 @@ export default function TaskList({ tasks, onUpdated }) {
     return (
       <div
         key={tid}
+        ref={(node) => {
+          if (!node) cardRefs.current.delete(tid);
+          else cardRefs.current.set(tid, node);
+        }}
         className={[
           "rounded-2xl border p-3 bg-white/80 backdrop-blur transition",
           "hover:-translate-y-[1px] hover:shadow-sm",
           isDone ? "opacity-70" : "",
+          isHighlighted ? "ring-2 ring-emerald-200 ring-offset-2 ring-offset-transparent" : "",
           moveClass,
         ].join(" ")}
       >
@@ -317,6 +355,13 @@ export default function TaskList({ tasks, onUpdated }) {
               rows={3}
               placeholder="Optional notes…"
               className="w-full rounded-xl border px-3 py-2 text-xs"
+            />
+
+            <ReminderEditor
+              entityType="task"
+              entityId={t.id}
+              title="Task reminder"
+              autoOpen={autoOpenReminderForId != null && String(autoOpenReminderForId) === tid}
             />
 
             <div className="flex justify-between items-center">

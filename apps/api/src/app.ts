@@ -37,6 +37,28 @@ export function createApp() {
   app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
 
+  if (env.NODE_ENV === "development") {
+    app.use((req, res, next) => {
+      const startedAt = process.hrtime.bigint();
+
+      res.on("finish", () => {
+        if (!req.path.startsWith("/api")) return;
+
+        const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+        const level =
+          elapsedMs >= 1000 ? "SLOW" :
+          elapsedMs >= 400 ? "WARN" :
+          "INFO";
+
+        console.log(
+          `[api:${level}] ${req.method} ${req.originalUrl} -> ${res.statusCode} in ${elapsedMs.toFixed(1)}ms`
+        );
+      });
+
+      next();
+    });
+  }
+
   // Sessions first, then passport
   app.use(createSessionMiddleware());
   configurePassport();

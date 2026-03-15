@@ -1,19 +1,19 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import usePWAInstall from "../hooks/usePWAInstall";
 
 const DISMISS_KEY = "lifeos_pwa_install_dismissed_v1";
 
+function readDismissed() {
+  try {
+    return localStorage.getItem(DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export default function InstallAppFloating() {
   const { isInstallable, isInstalled, install } = usePWAInstall();
-  const [dismissed, setDismissed] = useState(false);
-
-  useEffect(() => {
-    try {
-      setDismissed(localStorage.getItem(DISMISS_KEY) === "1");
-    } catch {
-      setDismissed(false);
-    }
-  }, []);
+  const [dismissed, setDismissed] = useState(readDismissed);
 
   function dismiss() {
     setDismissed(true);

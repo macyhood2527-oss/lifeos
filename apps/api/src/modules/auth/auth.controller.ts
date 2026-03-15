@@ -46,6 +46,9 @@ const resetPasswordSchema = z.object({
 const updateProfileSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   timezone: z.string().trim().min(1).max(100).optional(),
+  reminders_enabled: z.boolean().optional(),
+  habit_nudges_enabled: z.boolean().optional(),
+  weekly_recap_enabled: z.boolean().optional(),
 });
 
 function normalizeEmail(email: string) {
@@ -187,6 +190,9 @@ export async function updateProfile(req: Request, res: Response) {
   const patch = {
     ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
     ...(parsed.data.timezone !== undefined ? { timezone: parsed.data.timezone } : {}),
+    ...(parsed.data.reminders_enabled !== undefined ? { reminders_enabled: parsed.data.reminders_enabled } : {}),
+    ...(parsed.data.habit_nudges_enabled !== undefined ? { habit_nudges_enabled: parsed.data.habit_nudges_enabled } : {}),
+    ...(parsed.data.weekly_recap_enabled !== undefined ? { weekly_recap_enabled: parsed.data.weekly_recap_enabled } : {}),
   };
 
   const updated = await updateUserProfileById(userId, patch);

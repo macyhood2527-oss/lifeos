@@ -15,6 +15,12 @@ export async function list(req: Request, res: Response) {
   return res.json({ reminders });
 }
 
+export async function summary(req: Request, res: Response) {
+  const userId = (req.user as any).id as number;
+  const summary = await service.getReminderSummary(userId);
+  return res.json({ summary });
+}
+
 export async function patch(req: Request, res: Response) {
   const userId = (req.user as any).id as number;
   const id = Number(req.params.id);
@@ -24,12 +30,31 @@ export async function patch(req: Request, res: Response) {
   return res.json({ reminder });
 }
 
+export async function removeAll(req: Request, res: Response) {
+  const userId = (req.user as any).id as number;
+
+  if (req.query.all !== "true") {
+    return res.status(400).json({ error: "Set all=true to delete all reminders." });
+  }
+
+  const deleted = await service.deleteAllReminders(userId);
+  return res.json({ ok: true, deleted });
+}
+
 export async function remove(req: Request, res: Response) {
   const userId = (req.user as any).id as number;
   const id = Number(req.params.id);
   const ok = await service.deleteReminder(userId, id);
   if (!ok) return res.status(404).json({ error: "Reminder not found" });
   return res.json({ ok: true });
+}
+
+export async function handleToday(req: Request, res: Response) {
+  const userId = (req.user as any).id as number;
+  const id = Number(req.params.id);
+  const reminder = await service.handleReminderToday(userId, id);
+  if (!reminder) return res.status(404).json({ error: "Reminder not found" });
+  return res.json({ reminder });
 }
 
 // ✅ NEW: send this reminder immediately (for testing / manual nudge)

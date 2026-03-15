@@ -227,6 +227,40 @@ export async function deleteHabit(userId: number, habitId: number) {
   return true;
 }
 
+export async function hardDeleteAllHabits(userId: number) {
+  await pool.execute(
+    `DELETE hc
+     FROM habit_checkins hc
+     INNER JOIN habits h ON h.id = hc.habit_id
+     WHERE hc.user_id = ? AND h.user_id = ?`,
+    [userId, userId]
+  );
+
+  const [result] = await pool.execute<ResultSetHeader>(
+    `DELETE FROM habits WHERE user_id = ?`,
+    [userId]
+  );
+
+  return result.affectedRows;
+}
+
+export async function listHabitCheckins(userId: number) {
+  const [rows] = await pool.query<CheckinRow[]>(
+    `
+    SELECT id, user_id, habit_id, checkin_date, value, created_at
+    FROM habit_checkins
+    WHERE user_id=?
+    ORDER BY checkin_date DESC, habit_id ASC, created_at ASC
+    `,
+    [userId]
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    checkin_date: normalizeYYYYMMDD(row.checkin_date),
+  }));
+}
+
 export async function checkinHabit(userId: number, habitId: number, input: any) {
   const checkin_date = input.checkin_date;
   const value = Number(input.value ?? 1);

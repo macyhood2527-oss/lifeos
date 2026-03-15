@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import Section from "../../shared/ui/Section";
 import HabitList from "./components/HabitList";
 import { listHabits, createHabit, updateHabit, deleteHabit } from "./habits.api";
+import { Icons } from "../../config/icons";
 
 function GlassPanel({ children }) {
   return (
@@ -11,9 +14,28 @@ function GlassPanel({ children }) {
   );
 }
 
+function EmptyHabitsState({ title, body, chips = [] }) {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-[linear-gradient(135deg,rgba(255,255,255,0.82),rgba(241,247,237,0.9))] p-5">
+      <div className="text-sm font-medium text-stone-900">{title}</div>
+      <p className="mt-1 text-sm text-stone-600">{body}</p>
+      {chips.length ? (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          {chips.map((chip) => (
+            <span key={chip} className="rounded-full border border-black/10 bg-white/80 px-3 py-1 text-stone-700">
+              {chip}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function HabitsPage() {
-  const [loading, setLoading] = useState(true);
-  const [habits, setHabits] = useState([]);
+  const [searchParams] = useSearchParams();
+  const focusedHabitId = searchParams.get("item");
+  const openReminder = searchParams.get("reminder") === "1";
 
   // Manage UI
   const [includeInactive, setIncludeInactive] = useState(false);
@@ -49,29 +71,27 @@ export default function HabitsPage() {
     setConfirm(null);
   }
 
-  async function load() {
-    const h = await listHabits({ includeInactive });
-    setHabits(h ?? []);
-  }
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        await load();
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [includeInactive]);
+  const effectiveIncludeInactive = includeInactive || Boolean(focusedHabitId);
+  const habitsQuery = useQuery({
+    queryKey: ["habits", effectiveIncludeInactive ? "all" : "active"],
+    queryFn: () => listHabits({ includeInactive: effectiveIncludeInactive }),
+  });
+  const habits = habitsQuery.data ?? [];
+  const load = useCallback(() => habitsQuery.refetch(), [habitsQuery]);
 
   const activeHabits = useMemo(
     () => (Array.isArray(habits) ? habits : []).filter((h) => Number(h.active) === 1),
     [habits]
   );
+  const visibleCheckinHabits = useMemo(() => {
+    if (!focusedHabitId) return activeHabits;
+    const focused = (Array.isArray(habits) ? habits : []).find(
+      (habit) => String(habit.id) === String(focusedHabitId)
+    );
+    if (!focused) return activeHabits;
+    if (activeHabits.some((habit) => String(habit.id) === String(focused.id))) return activeHabits;
+    return [focused, ...activeHabits];
+  }, [activeHabits, focusedHabitId, habits]);
 
   const activeHabitStats = useMemo(() => {
     function getTarget(h) {
@@ -126,7 +146,7 @@ export default function HabitsPage() {
 
       await load();
       showToast("Habit added 🌿", "ok");
-    } catch (e) {
+    } catch {
       showToast("Couldn’t add habit. Try again.", "warn");
     } finally {
       setBusyId(null);
@@ -161,7 +181,7 @@ export default function HabitsPage() {
       await load();
       cancelEdit();
       showToast("Changes saved", "ok");
-    } catch (e) {
+    } catch {
       showToast("Save failed. Please retry.", "warn");
     } finally {
       setBusyId(null);
@@ -180,7 +200,7 @@ export default function HabitsPage() {
           await deleteHabit(habitId); // backend soft-disables (active=0)
           await load();
           showToast("Habit disabled", "ok");
-        } catch (e) {
+        } catch {
           showToast("Disable failed. Try again.", "warn");
         } finally {
           setBusyId(null);
@@ -190,7 +210,7 @@ export default function HabitsPage() {
     });
   }
 
-  if (loading) return <div className="text-stone-500">Loading…</div>;
+  if (habitsQuery.isLoading) return <div className="text-stone-500">Loading…</div>;
 
   return (
     <div className="relative space-y-8">
@@ -246,7 +266,13 @@ export default function HabitsPage() {
 
       {/* Manage */}
       <GlassPanel>
-        <Section title="Habits" subtitle="Create, tweak, and keep your rhythms gentle.">
+        <Section title="Habits" subtitle="Create, tweak, and keep your rhythms gentle." icon={Icons.habits}>
+          {focusedHabitId ? (
+            <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
+              Focused from reminders. Inactive habits are shown too so the linked habit stays visible.
+            </div>
+          ) : null}
+
           {/* Top controls */}
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm text-stone-600">
@@ -305,6 +331,13 @@ export default function HabitsPage() {
 
           {/* Manage list */}
           <div className="mt-4 space-y-2">
+            {(Array.isArray(habits) ? habits : []).length === 0 ? (
+              <EmptyHabitsState
+                title="Your habit space is still open and calm."
+                body="Start with one anchor habit you can keep even on a low-energy day. The goal is consistency, not intensity."
+                chips={["Drink water", "5-minute tidy", "Read one page"]}
+              />
+            ) : null}
             {(Array.isArray(habits) ? habits : []).map((h) => {
               const isEditing = editId === h.id;
               const isBusy = busyId === h.id;
@@ -410,7 +443,7 @@ export default function HabitsPage() {
 
       {/* Check-in list */}
       <GlassPanel>
-        <Section title="Check in" subtitle="Small check-ins, steady progress.">
+        <Section title="Check in" subtitle="Small check-ins, steady progress." icon={Icons.themeCalm}>
           <div className="mb-4 grid gap-2 sm:grid-cols-4">
             <div className="rounded-2xl border border-black/5 bg-white/70 px-3 py-2">
               <div className="text-[11px] text-stone-500">Total habits</div>
@@ -432,12 +465,19 @@ export default function HabitsPage() {
             </div>
           </div>
 
-          {activeHabits.length === 0 ? (
-            <div className="rounded-2xl bg-stone-100 p-4 text-sm text-stone-600">
-              No active habits yet. Add one above — start tiny.
-            </div>
+          {visibleCheckinHabits.length === 0 ? (
+            <EmptyHabitsState
+              title="No active habits to check in yet."
+              body="Try one habit that feels almost too easy. Tiny habits are easier to return to, and that return is what builds trust."
+              chips={["Aim for easy wins", "One habit is enough", "Weekly habits work too"]}
+            />
           ) : (
-            <HabitList habits={activeHabits} onCheckedIn={load} />
+            <HabitList
+              habits={visibleCheckinHabits}
+              onCheckedIn={load}
+              highlightHabitId={focusedHabitId}
+              autoOpenReminderForId={openReminder ? focusedHabitId : null}
+            />
           )}
         </Section>
       </GlassPanel>

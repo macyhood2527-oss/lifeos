@@ -9,6 +9,7 @@ projectsRouter.use(requireAuth);
 
 projectsRouter.post("/", asyncHandler(controller.create));
 projectsRouter.get("/", asyncHandler(controller.list));
+projectsRouter.delete("/", asyncHandler(controller.removeAll));
 projectsRouter.get("/:id", asyncHandler(controller.getOne));
 projectsRouter.patch("/:id", asyncHandler(controller.patch));
 projectsRouter.delete("/:id", asyncHandler(controller.remove));

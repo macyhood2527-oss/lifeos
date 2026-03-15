@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../api/http";
 import { endpoints } from "../api/endpoints";
 
@@ -19,23 +19,18 @@ export function AuthProvider({ children }) {
     }
   }
 
-async function logout() {
-  try {
-    await apiFetch(endpoints.logout, { method: "POST" });
-  } finally {
-    localStorage.removeItem("lifeos_token");
-    setUser(null);
+  async function logout() {
+    try {
+      await apiFetch(endpoints.logout, { method: "POST" });
+    } finally {
+      localStorage.removeItem("lifeos_token");
+      setUser(null);
+    }
   }
-}
 
   useEffect(() => { refresh(); }, []);
 
   const value = useMemo(() => ({ user, booting, refresh, logout }), [user, booting]);
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
-
-export function useAuth() {
-  const ctx = useContext(AuthCtx);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-}
+export { AuthCtx };

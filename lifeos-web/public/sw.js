@@ -1,5 +1,3 @@
-/* eslint-disable no-restricted-globals */
-
 const CACHE_NAME = "lifeos-cache-v1";
 
 /* =========================
@@ -103,7 +101,7 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     (async () => {
-      const allClients = await clients.matchAll({
+      const allClients = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
       });
@@ -116,8 +114,8 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
 
-      if (clients.openWindow) {
-        await clients.openWindow(url);
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(url);
       }
     })()
   );

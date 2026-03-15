@@ -9,5 +9,6 @@ tasksRouter.use(requireAuth);
 
 tasksRouter.post("/", asyncHandler(controller.create));
 tasksRouter.get("/", asyncHandler(controller.list));
+tasksRouter.delete("/", asyncHandler(controller.removeAll));
 tasksRouter.patch("/:id", asyncHandler(controller.patch));
 tasksRouter.delete("/:id", asyncHandler(controller.remove));

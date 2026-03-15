@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { createBrowserRouter } from "react-router-dom";
 
 import RequireAuth from "../shared/auth/RequireAuth";
+import OnboardingGate from "../shared/auth/OnboardingGate";
 import Loader from "../shared/ui/loader";
 
 const AuthCallbackPage = lazy(() => import("../pages/AuthCallbackPage"));
@@ -17,6 +18,8 @@ const TasksPage = lazy(() => import("../features/tasks/TasksPage"));
 const ReflectionsPage = lazy(() => import("../features/reflections/ReflectionsPage"));
 const AnalyticsPage = lazy(() => import("../features/analytics/AnalyticsPage"));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage"));
+const RemindersPage = lazy(() => import("../features/reminders/RemindersPage"));
+const WelcomePage = lazy(() => import("../features/onboarding/WelcomePage"));
 
 function withSuspense(element, { small = false } = {}) {
   return (
@@ -34,13 +37,21 @@ export const router = createBrowserRouter([
   { path: "/terms", element: withSuspense(<TermsPage />) },
   { path: "/faqs", element: withSuspense(<FaqsPage />) },
   { path: "/about-me", element: withSuspense(<AboutPage />) },
+  {
+    path: "/welcome",
+    element: (
+      <RequireAuth>
+        {withSuspense(<WelcomePage />)}
+      </RequireAuth>
+    ),
+  },
 
   // PROTECTED APP
   {
     path: "/",
     element: (
       <RequireAuth>
-        {withSuspense(<AppShell />)}
+        <OnboardingGate>{withSuspense(<AppShell />)}</OnboardingGate>
       </RequireAuth>
     ),
     children: [
@@ -48,6 +59,7 @@ export const router = createBrowserRouter([
       { path: "today", element: withSuspense(<TodayPage />, { small: true }) },
       { path: "habits", element: withSuspense(<HabitsPage />, { small: true }) },
       { path: "tasks", element: withSuspense(<TasksPage />, { small: true }) },
+      { path: "reminders", element: withSuspense(<RemindersPage />, { small: true }) },
       { path: "reflections", element: withSuspense(<ReflectionsPage />, { small: true }) },
       { path: "analytics", element: withSuspense(<AnalyticsPage />, { small: true }) },
       { path: "settings", element: withSuspense(<SettingsPage />, { small: true }) },

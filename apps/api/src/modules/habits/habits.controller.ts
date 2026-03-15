@@ -23,6 +23,12 @@ export async function list(req: Request, res: Response) {
   return res.json({ habits });
 }
 
+export async function listCheckins(req: Request, res: Response) {
+  const userId = (req.user as any).id as number;
+  const checkins = await service.listHabitCheckins(userId);
+  return res.json({ checkins });
+}
+
 export async function patch(req: Request, res: Response) {
   const userId = (req.user as any).id as number;
   const habitId = Number(req.params.id);
@@ -30,6 +36,17 @@ export async function patch(req: Request, res: Response) {
   const habit = await service.updateHabit(userId, habitId, patchBody);
   if (!habit) return res.status(404).json({ error: "Habit not found" });
   return res.json({ habit });
+}
+
+export async function removeAll(req: Request, res: Response) {
+  const userId = (req.user as any).id as number;
+
+  if (req.query.all !== "true" || req.query.hard !== "true") {
+    return res.status(400).json({ error: "Set all=true&hard=true to permanently delete all habits." });
+  }
+
+  const deleted = await service.hardDeleteAllHabits(userId);
+  return res.json({ ok: true, deleted });
 }
 
 export async function remove(req: Request, res: Response) {
