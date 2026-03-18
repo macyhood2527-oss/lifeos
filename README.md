@@ -4,7 +4,7 @@ A gentle productivity journal — tasks, habits, reflections, reminders, and wee
 
 ## Monorepo Structure
 
-- `apps/api` — Node.js + Express + MySQL backend (Google OAuth, sessions, analytics)
+- `apps/api` — Node.js + Express backend (Google OAuth, sessions, analytics)
 - `lifeos-web` — React (Vite) + Tailwind frontend (pastel glass UI, charts via Recharts)
 
 ## Features
@@ -26,9 +26,21 @@ Frontend:
 Backend:
 - Node.js
 - Express
-- MySQL
+- PostgreSQL / Supabase
 - Passport (Google OAuth)
-- Express Sessions (MySQL store)
+- Express Sessions
+
+## Deployment
+
+- Frontend: Vercel
+- Backend: Render
+- Database: Supabase Postgres
+
+## Environment Notes
+
+- `apps/api` supports both `DB_PROVIDER=mysql` and `DB_PROVIDER=postgres`
+- For Render + Supabase, use the Supabase session pooler `DATABASE_URL`
+- Session storage uses MySQL in legacy mode and Postgres in Supabase mode
 
 ---
 

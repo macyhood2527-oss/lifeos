@@ -12,9 +12,6 @@ import { ensureUserPreferenceColumns } from "./modules/users/users.service";
 let schedulerStarted = false;
 
 async function main() {
-  console.log("[startup] DB_PROVIDER:", env.DB_PROVIDER);
-  console.log("[startup] DATABASE_URL present:", Boolean(env.DATABASE_URL));
-
   // quick DB ping on startup
   await pool.query("SELECT 1");
   await ensureUserPreferenceColumns();
