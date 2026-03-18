@@ -105,6 +105,8 @@ export async function createLocalUser(input: {
   name: string;
   passwordHash: string;
 }) {
+  const enabledValue = env.DB_PROVIDER === "postgres" ? true : 1;
+
   // Keep google_id compact for schemas with short varchar length.
   const localGoogleId = `l_${createHash("sha256")
     .update(input.email.toLowerCase())
@@ -114,8 +116,8 @@ export async function createLocalUser(input: {
   const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO users
       (google_id, email, password_hash, name, avatar_url, timezone, tone, quiet_hours_start, quiet_hours_end, reminders_enabled, habit_nudges_enabled, weekly_recap_enabled, created_at, updated_at)
-     VALUES (?, ?, ?, ?, NULL, 'Asia/Manila', 'gentle', NULL, NULL, 1, 1, 1, NOW(3), NOW(3))`,
-    [localGoogleId, input.email, input.passwordHash, input.name]
+     VALUES (?, ?, ?, ?, NULL, 'Asia/Manila', 'gentle', NULL, NULL, ?, ?, ?, NOW(3), NOW(3))`,
+    [localGoogleId, input.email, input.passwordHash, input.name, enabledValue, enabledValue, enabledValue]
   );
 
   return (await findUserById(Number(result.insertId)))!;
@@ -208,6 +210,8 @@ export async function findOrCreateUserFromGoogle(input: {
   name: string;
   avatarUrl: string | null;
 }) {
+  const enabledValue = env.DB_PROVIDER === "postgres" ? true : 1;
+
   // 1) Try by google_id
   const [byGoogle] = await pool.query<UserRow[]>(
     `SELECT ${USER_PUBLIC_COLUMNS} FROM users WHERE google_id=? LIMIT 1`,
@@ -235,8 +239,8 @@ export async function findOrCreateUserFromGoogle(input: {
   const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO users
       (google_id, email, name, avatar_url, timezone, tone, quiet_hours_start, quiet_hours_end, reminders_enabled, habit_nudges_enabled, weekly_recap_enabled, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'Asia/Manila', 'gentle', NULL, NULL, 1, 1, 1, NOW(3), NOW(3))`,
-    [input.googleId, input.email, input.name, input.avatarUrl]
+     VALUES (?, ?, ?, ?, 'Asia/Manila', 'gentle', NULL, NULL, ?, ?, ?, NOW(3), NOW(3))`,
+    [input.googleId, input.email, input.name, input.avatarUrl, enabledValue, enabledValue, enabledValue]
   );
 
   return (await findUserById(Number(result.insertId)))!;
