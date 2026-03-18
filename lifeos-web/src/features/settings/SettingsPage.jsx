@@ -546,8 +546,12 @@ export default function SettingsPage() {
         `Import complete: ${importedProjects} projects, ${importedTasks} tasks, ${importedHabits} habits, ${importedCheckins} check-ins, ${importedReflections} reflections, ${importedReminders} reminders.`,
         "ok"
       );
-    } catch {
-      showToast("Import failed. Please choose a valid LifeOS export JSON.", "warn");
+    } catch (error) {
+      const detail =
+        error?.data?.error ||
+        error?.message ||
+        "Import failed. Please choose a valid LifeOS export JSON.";
+      showToast(detail, "warn");
     } finally {
       if (importInputRef.current) importInputRef.current.value = "";
       setBusy(false);
