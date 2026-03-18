@@ -1,6 +1,7 @@
 import { pool } from "../../db/pool";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { createHash } from "crypto";
+import { env } from "../../config/env";
 
 export type UserRow = RowDataPacket & {
   id: number;
@@ -13,9 +14,9 @@ export type UserRow = RowDataPacket & {
   tone: "gentle" | "neutral" | "direct";
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
-  reminders_enabled: number;
-  habit_nudges_enabled: number;
-  weekly_recap_enabled: number;
+  reminders_enabled: number | boolean;
+  habit_nudges_enabled: number | boolean;
+  weekly_recap_enabled: number | boolean;
   created_at: string;
   updated_at: string;
 };
@@ -38,6 +39,10 @@ const USER_PUBLIC_COLUMNS = `
 `;
 
 export async function ensureUserPreferenceColumns() {
+  if (env.DB_PROVIDER !== "mysql") {
+    return;
+  }
+
   const [rows] = await pool.query<
     (RowDataPacket & { COLUMN_NAME: string })[]
   >(
@@ -135,6 +140,7 @@ export async function updateUserProfileById(
     weekly_recap_enabled: boolean;
   }>
 ) {
+  const toDbBoolean = (value: boolean) => (env.DB_PROVIDER === "postgres" ? value : (value ? 1 : 0));
   const fields: string[] = [];
   const values: any[] = [];
 
@@ -148,15 +154,15 @@ export async function updateUserProfileById(
   }
   if (patch.reminders_enabled !== undefined) {
     fields.push("reminders_enabled=?");
-    values.push(patch.reminders_enabled ? 1 : 0);
+    values.push(toDbBoolean(patch.reminders_enabled));
   }
   if (patch.habit_nudges_enabled !== undefined) {
     fields.push("habit_nudges_enabled=?");
-    values.push(patch.habit_nudges_enabled ? 1 : 0);
+    values.push(toDbBoolean(patch.habit_nudges_enabled));
   }
   if (patch.weekly_recap_enabled !== undefined) {
     fields.push("weekly_recap_enabled=?");
-    values.push(patch.weekly_recap_enabled ? 1 : 0);
+    values.push(toDbBoolean(patch.weekly_recap_enabled));
   }
 
   if (fields.length === 0) {
@@ -182,9 +188,9 @@ export async function getUserSettings(userId: number) {
       tone: "gentle" | "neutral" | "direct";
       quiet_hours_start: string | null;
       quiet_hours_end: string | null;
-      reminders_enabled: number;
-      habit_nudges_enabled: number;
-      weekly_recap_enabled: number;
+      reminders_enabled: number | boolean;
+      habit_nudges_enabled: number | boolean;
+      weekly_recap_enabled: number | boolean;
     })[]
   >(
     `SELECT id, timezone, tone, quiet_hours_start, quiet_hours_end, reminders_enabled, habit_nudges_enabled, weekly_recap_enabled

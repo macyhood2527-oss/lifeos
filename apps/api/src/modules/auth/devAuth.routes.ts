@@ -27,14 +27,18 @@ devAuthRouter.post("/dev-login", async (req, res, next) => {
     );
 
     let userId: number;
+    const remindersEnabled = env.DB_PROVIDER === "postgres" ? true : 1;
+    const habitNudgesEnabled = env.DB_PROVIDER === "postgres" ? true : 1;
+    const weeklyRecapEnabled = env.DB_PROVIDER === "postgres" ? true : 1;
 
     if (rows[0]?.id) {
       userId = Number(rows[0].id);
     } else {
       const [result] = await pool.execute<ResultSetHeader>(
-        `INSERT INTO users (google_id, email, name, avatar_url, timezone, tone, created_at, updated_at)
-         VALUES (?, ?, ?, NULL, 'Asia/Manila', 'gentle', NOW(3), NOW(3))`,
-        [googleId, email, name]
+        `INSERT INTO users
+          (google_id, email, name, avatar_url, timezone, tone, reminders_enabled, habit_nudges_enabled, weekly_recap_enabled, created_at, updated_at)
+         VALUES (?, ?, ?, NULL, 'Asia/Manila', 'gentle', ?, ?, ?, NOW(3), NOW(3))`,
+        [googleId, email, name, remindersEnabled, habitNudgesEnabled, weeklyRecapEnabled]
       );
       userId = Number(result.insertId);
     }

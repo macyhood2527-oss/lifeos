@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { env } from "../../config/env";
 
 type SubRow = RowDataPacket & {
   id: number;
@@ -14,41 +15,62 @@ export async function upsertSubscription(
   userId: number,
   input: { endpoint: string; keys: { p256dh: string; auth: string }; userAgent?: string | null }
 ) {
-  // Support both legacy and current push_subscriptions schemas.
-  try {
+  const fullValues = [userId, input.endpoint, input.keys.p256dh, input.keys.auth, input.userAgent ?? null];
+  const legacyValues = [userId, input.endpoint, input.keys.p256dh, input.keys.auth];
+
+  if (env.DB_PROVIDER === "postgres") {
     await pool.execute<ResultSetHeader>(
       `
       INSERT INTO push_subscriptions
         (user_id, endpoint, p256dh, auth, user_agent, last_seen_at, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3), NOW(3))
-      ON DUPLICATE KEY UPDATE
-        user_id=VALUES(user_id),
-        p256dh=VALUES(p256dh),
-        auth=VALUES(auth),
-        user_agent=VALUES(user_agent),
+      ON CONFLICT (endpoint) DO UPDATE SET
+        user_id=EXCLUDED.user_id,
+        p256dh=EXCLUDED.p256dh,
+        auth=EXCLUDED.auth,
+        user_agent=EXCLUDED.user_agent,
         last_seen_at=NOW(3),
         updated_at=NOW(3)
       `,
-      [userId, input.endpoint, input.keys.p256dh, input.keys.auth, input.userAgent ?? null]
+      fullValues
     );
-  } catch (err: any) {
-    // Fallback for older schema without user_agent/last_seen_at/updated_at columns.
-    const code = err?.code;
-    if (code !== "ER_BAD_FIELD_ERROR" && code !== "ER_NO_DEFAULT_FOR_FIELD") {
-      throw err;
-    }
+  } else {
+  // Support both legacy and current push_subscriptions schemas.
+    try {
+      await pool.execute<ResultSetHeader>(
+        `
+        INSERT INTO push_subscriptions
+          (user_id, endpoint, p256dh, auth, user_agent, last_seen_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3), NOW(3))
+        ON DUPLICATE KEY UPDATE
+          user_id=VALUES(user_id),
+          p256dh=VALUES(p256dh),
+          auth=VALUES(auth),
+          user_agent=VALUES(user_agent),
+          last_seen_at=NOW(3),
+          updated_at=NOW(3)
+        `,
+        fullValues
+      );
+    } catch (err: any) {
+      // Fallback for older schema without user_agent/last_seen_at/updated_at columns.
+      const code = err?.code;
+      if (code !== "ER_BAD_FIELD_ERROR" && code !== "ER_NO_DEFAULT_FOR_FIELD") {
+        throw err;
+      }
 
-    await pool.execute<ResultSetHeader>(
-      `
-      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
-      VALUES (?, ?, ?, ?, NOW(3))
-      ON DUPLICATE KEY UPDATE
-        user_id=VALUES(user_id),
-        p256dh=VALUES(p256dh),
-        auth=VALUES(auth)
-      `,
-      [userId, input.endpoint, input.keys.p256dh, input.keys.auth]
-    );
+      await pool.execute<ResultSetHeader>(
+        `
+        INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+        VALUES (?, ?, ?, ?, NOW(3))
+        ON DUPLICATE KEY UPDATE
+          user_id=VALUES(user_id),
+          p256dh=VALUES(p256dh),
+          auth=VALUES(auth)
+        `,
+        legacyValues
+      );
+    }
   }
 
   const [rows] = await pool.query<SubRow[]>(

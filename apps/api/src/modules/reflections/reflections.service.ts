@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { env } from "../../config/env";
 
 export type ReflectionRow = RowDataPacket & {
   id: number;
@@ -36,30 +37,49 @@ export async function upsertReflection(
     notes: string | null;
   }>
 ) {
-  // Using MySQL ON DUPLICATE KEY UPDATE
-  await pool.execute(
-    `
-    INSERT INTO reflections
-      (user_id, reflect_date, mood, gratitude, highlights, challenges, notes, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3), NOW(3))
-    ON DUPLICATE KEY UPDATE
-      mood=VALUES(mood),
-      gratitude=VALUES(gratitude),
-      highlights=VALUES(highlights),
-      challenges=VALUES(challenges),
-      notes=VALUES(notes),
-      updated_at=NOW(3)
-    `,
-    [
-      userId,
-      date,
-      input.mood ?? null,
-      input.gratitude ?? null,
-      input.highlights ?? null,
-      input.challenges ?? null,
-      input.notes ?? null,
-    ]
-  );
+  const values = [
+    userId,
+    date,
+    input.mood ?? null,
+    input.gratitude ?? null,
+    input.highlights ?? null,
+    input.challenges ?? null,
+    input.notes ?? null,
+  ];
+
+  if (env.DB_PROVIDER === "postgres") {
+    await pool.execute(
+      `
+      INSERT INTO reflections
+        (user_id, reflect_date, mood, gratitude, highlights, challenges, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3), NOW(3))
+      ON CONFLICT (user_id, reflect_date) DO UPDATE SET
+        mood=EXCLUDED.mood,
+        gratitude=EXCLUDED.gratitude,
+        highlights=EXCLUDED.highlights,
+        challenges=EXCLUDED.challenges,
+        notes=EXCLUDED.notes,
+        updated_at=NOW(3)
+      `,
+      values
+    );
+  } else {
+    await pool.execute(
+      `
+      INSERT INTO reflections
+        (user_id, reflect_date, mood, gratitude, highlights, challenges, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3), NOW(3))
+      ON DUPLICATE KEY UPDATE
+        mood=VALUES(mood),
+        gratitude=VALUES(gratitude),
+        highlights=VALUES(highlights),
+        challenges=VALUES(challenges),
+        notes=VALUES(notes),
+        updated_at=NOW(3)
+      `,
+      values
+    );
+  }
 
   return getReflectionByDate(userId, date);
 }

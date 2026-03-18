@@ -1,5 +1,9 @@
 import pool from "../db/pool.js";
 
+function isPostgres() {
+  return process.env.DB_PROVIDER === "postgres";
+}
+
 /**
  * Assumes you have a table `push_subscriptions` like:
  * - id
@@ -24,17 +28,31 @@ export async function upsertSubscription(userId, sub) {
   }
 
   // Keep it simple: one row per endpoint per user
-  await pool.query(
-    `
-    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
-    VALUES (?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-      p256dh = VALUES(p256dh),
-      auth = VALUES(auth),
-      updated_at = NOW()
-    `,
-    [userId, endpoint, p256dh, auth]
-  );
+  if (isPostgres()) {
+    await pool.query(
+      `
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT (endpoint) DO UPDATE SET
+        p256dh = EXCLUDED.p256dh,
+        auth = EXCLUDED.auth,
+        updated_at = NOW()
+      `,
+      [userId, endpoint, p256dh, auth]
+    );
+  } else {
+    await pool.query(
+      `
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+      VALUES (?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        p256dh = VALUES(p256dh),
+        auth = VALUES(auth),
+        updated_at = NOW()
+      `,
+      [userId, endpoint, p256dh, auth]
+    );
+  }
 
   return { endpoint };
 }

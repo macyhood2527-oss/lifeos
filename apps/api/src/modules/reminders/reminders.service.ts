@@ -3,6 +3,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { configureWebPush, getWebPushConfigError, isWebPushConfigured, webpush } from "../../config/webpush";
 import { listSubscriptions, removeSubscriptionById } from "../push/push.service";
 import { buildReminderText } from "../../scheduler/messageTemplates";
+import { env } from "../../config/env";
 
 export type ReminderRow = RowDataPacket & {
   id: number;
@@ -11,15 +12,15 @@ export type ReminderRow = RowDataPacket & {
   entity_type: "habit" | "task";
   entity_id: number;
 
-  enabled: number;
+  enabled: number | boolean;
 
   schedule_type: "daily" | "weekly" | "cron";
   due_at: string | null;        // datetime or null
   time_of_day: string | null;   // "HH:MM" or "HH:MM:SS" or null
-  days_of_week: string | null;  // MySQL SET string e.g. "mon,wed,fri"
+  days_of_week: string | string[] | null;  // MySQL SET string or Postgres text[]
   cron_expr: string | null;
 
-  respect_quiet_hours: number;  // 0/1
+  respect_quiet_hours: number | boolean;  // 0/1 or boolean
   last_run_at: string | null;
   next_run_at: string | null;
 
@@ -44,24 +45,43 @@ function normalizeDaysSet(days: DayToken[] | null | undefined): DayToken[] | nul
 }
 
 // MySQL returns SET as "mon,tue,wed" string or "" (empty) or NULL
-function parseDaysSetString(dbValue: string | null): Set<DayToken> | null {
+function parseDaysSetString(dbValue: string | string[] | null): Set<DayToken> | null {
   if (!dbValue) return null; // null/empty => treat as "every day"
-  const parts = dbValue
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean) as DayToken[];
+  const parts = Array.isArray(dbValue)
+    ? dbValue
+    : dbValue
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
 
   if (parts.length === 0) return null;
-  return new Set(parts);
+  return new Set(parts as DayToken[]);
 }
 
-function daysSetToDbString(days: DayToken[] | null | undefined): string | null {
+function daysSetToDbValue(days: DayToken[] | null | undefined): string[] | string | null {
   const normalized = normalizeDaysSet(days);
   if (!normalized) return null;
-  return normalized.join(",");
+  return env.DB_PROVIDER === "postgres" ? normalized : normalized.join(",");
 }
 
-function computeNextFromTimeAndDays(timeHHMM: string, daysOfWeekDb: string | null, baseDate?: Date) {
+function toDbBoolean(value: boolean | undefined, fallback = true) {
+  const resolved = value ?? fallback;
+  return env.DB_PROVIDER === "postgres" ? resolved : (resolved ? 1 : 0);
+}
+
+function trueLiteral() {
+  return env.DB_PROVIDER === "postgres" ? "TRUE" : "1";
+}
+
+function falseLiteral() {
+  return env.DB_PROVIDER === "postgres" ? "FALSE" : "0";
+}
+
+function isEnabled(value: boolean | number) {
+  return value === true || value === 1;
+}
+
+function computeNextFromTimeAndDays(timeHHMM: string, daysOfWeekDb: string | string[] | null, baseDate?: Date) {
   const now = baseDate ? new Date(baseDate) : new Date();
   const [hh, mm] = timeHHMM.slice(0, 5).split(":").map(Number);
 
@@ -124,7 +144,7 @@ export async function createReminder(
     input.schedule_type ??
     (input.cron_expr ? "cron" : input.days_of_week && input.days_of_week.length ? "weekly" : "daily");
 
-  const daysDb = daysSetToDbString(input.days_of_week);
+  const daysDb = daysSetToDbValue(input.days_of_week);
 
   let nextRun: Date | null = null;
 
@@ -150,13 +170,13 @@ export async function createReminder(
       userId,
       input.entity_type,
       input.entity_id,
-      input.enabled === false ? 0 : 1,
+      toDbBoolean(input.enabled, true),
       schedule_type,
       input.due_at ?? null,
       input.time_of_day ?? null,
       daysDb,
       input.cron_expr ?? null,
-      input.respect_quiet_hours === false ? 0 : 1,
+      toDbBoolean(input.respect_quiet_hours, true),
       nextRun
     ]
   );
@@ -177,13 +197,13 @@ export async function getReminderSummary(userId: number) {
     `
     SELECT
       COUNT(*) AS total,
-      SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled_count,
-      SUM(CASE WHEN enabled = 0 THEN 1 ELSE 0 END) AS paused_count,
+      SUM(CASE WHEN enabled = ${trueLiteral()} THEN 1 ELSE 0 END) AS enabled_count,
+      SUM(CASE WHEN enabled = ${falseLiteral()} THEN 1 ELSE 0 END) AS paused_count,
       SUM(
         CASE
-          WHEN enabled = 1
+          WHEN enabled = ${trueLiteral()}
            AND COALESCE(next_run_at, due_at) IS NOT NULL
-           AND COALESCE(next_run_at, due_at) <= NOW()
+          AND COALESCE(next_run_at, due_at) <= NOW()
           THEN 1
           ELSE 0
         END
@@ -238,20 +258,22 @@ export async function updateReminder(
   if (patch.entity_type !== undefined) set("entity_type", patch.entity_type);
   if (patch.entity_id !== undefined) set("entity_id", patch.entity_id);
 
-  if (patch.enabled !== undefined) set("enabled", patch.enabled ? 1 : 0);
+  if (patch.enabled !== undefined) set("enabled", toDbBoolean(patch.enabled, true));
   if (patch.schedule_type !== undefined) set("schedule_type", patch.schedule_type);
 
   if (patch.due_at !== undefined) set("due_at", patch.due_at);
   if (patch.time_of_day !== undefined) set("time_of_day", patch.time_of_day);
-  if (patch.days_of_week !== undefined) set("days_of_week", daysSetToDbString(patch.days_of_week));
+  if (patch.days_of_week !== undefined) set("days_of_week", daysSetToDbValue(patch.days_of_week));
   if (patch.cron_expr !== undefined) set("cron_expr", patch.cron_expr);
 
-  if (patch.respect_quiet_hours !== undefined) set("respect_quiet_hours", patch.respect_quiet_hours ? 1 : 0);
+  if (patch.respect_quiet_hours !== undefined) {
+    set("respect_quiet_hours", toDbBoolean(patch.respect_quiet_hours, true));
+  }
 
   // recompute next_run_at if schedule-related fields changed
   const schedule_type = patch.schedule_type ?? current.schedule_type;
   const time_of_day = patch.time_of_day ?? current.time_of_day;
-  const daysDb = patch.days_of_week !== undefined ? daysSetToDbString(patch.days_of_week) : current.days_of_week;
+  const daysDb = patch.days_of_week !== undefined ? daysSetToDbValue(patch.days_of_week) : current.days_of_week;
   const due_at = patch.due_at ?? current.due_at;
   const cron_expr = patch.cron_expr ?? current.cron_expr;
 
@@ -300,7 +322,7 @@ export async function deleteAllReminders(userId: number) {
 export async function listDueReminders(now: Date) {
   const [rows] = await pool.query<ReminderRow[]>(
     `SELECT * FROM reminders
-     WHERE enabled=1 AND next_run_at IS NOT NULL AND next_run_at <= ?
+     WHERE enabled=${trueLiteral()} AND next_run_at IS NOT NULL AND next_run_at <= ?
      ORDER BY next_run_at ASC
      LIMIT 200`,
     [now]

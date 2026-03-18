@@ -1,6 +1,7 @@
 import { pool } from "../../db/pool";
 import type { RowDataPacket } from "mysql2/promise";
 import { getUserSettings } from "../users/users.service";
+import { env } from "../../config/env";
 
 type StatusCountsRow = RowDataPacket & { status: "sent" | "failed" | "skipped"; count: number };
 type CountRow = RowDataPacket & { count: number };
@@ -105,6 +106,7 @@ function dtStart(dateYYYYMMDD: string) {
 }
 
 export async function getWeeklyAnalytics(userId: number, opts?: { weekStart?: string }) {
+  const activeLiteral = env.DB_PROVIDER === "postgres" ? "TRUE" : "1";
   const settings = await getUserSettings(userId);
   const tz = settings?.timezone || "Asia/Manila";
 
@@ -167,7 +169,7 @@ export async function getWeeklyAnalytics(userId: number, opts?: { weekStart?: st
        AND c.checkin_date >= ?
        AND c.checkin_date <= ?
       WHERE h.user_id = ?
-        AND h.active = 1
+        AND h.active = ${activeLiteral}
       GROUP BY h.id, h.name, h.cadence, h.target_per_period
       ORDER BY h.sort_order ASC, h.created_at DESC
       `,

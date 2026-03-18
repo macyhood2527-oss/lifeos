@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool";
 import type { RowDataPacket } from "mysql2/promise";
+import { env } from "../../config/env";
 
 type TaskRow = RowDataPacket & {
   id: number;
@@ -15,7 +16,7 @@ type HabitRow = RowDataPacket & {
   name: string;
   cadence: "daily" | "weekly";
   target_per_period: number;
-  active: number;
+  active: number | boolean;
 };
 
 type CheckinRow = RowDataPacket & {
@@ -31,6 +32,8 @@ type ReflectionRow = RowDataPacket & {
 };
 
 export async function getTodayPayload(userId: number, today: string) {
+  const activeLiteral = env.DB_PROVIDER === "postgres" ? "TRUE" : "1";
+
   // Tasks: overdue, due today, active (todo/doing/backlog)
   const [overdue] = await pool.query<TaskRow[]>(
     `SELECT id, title, status, priority, due_date, project_id
@@ -63,7 +66,7 @@ export async function getTodayPayload(userId: number, today: string) {
   const [habits] = await pool.query<HabitRow[]>(
     `SELECT id, name, cadence, target_per_period, active
      FROM habits
-     WHERE user_id=? AND active=1
+     WHERE user_id=? AND active=${activeLiteral}
      ORDER BY sort_order ASC, created_at DESC`,
     [userId]
   );

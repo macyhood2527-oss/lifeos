@@ -11,6 +11,10 @@ import { isInQuietHours } from "../utils/time";
 
 type EntityTitleRow = RowDataPacket & { title?: string; name?: string };
 
+function isEnabled(value: boolean | number) {
+  return value === true || value === 1;
+}
+
 // ---- notification_log helpers ----
 async function hasRunKey(runKey: string) {
   const [rows] = await pool.query<RowDataPacket[]>(
@@ -100,7 +104,7 @@ export function startReminderScheduler() {
         }
 
         // ✅ quiet hours (user-based + timezone-aware)
-        if (r.respect_quiet_hours === 1) {
+        if (isEnabled(r.respect_quiet_hours)) {
           const settings = await getUserSettings(r.user_id);
           const tz = settings?.timezone || "Asia/Manila";
 

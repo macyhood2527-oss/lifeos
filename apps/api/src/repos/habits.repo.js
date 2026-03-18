@@ -1,5 +1,9 @@
 import pool from "../db/pool.js";
 
+function isPostgres() {
+  return process.env.DB_PROVIDER === "postgres";
+}
+
 /**
  * NOTE about days_of_week storage:
  * - If your `habits.days_of_week` is MySQL SET('mon',...): you can store as comma string "mon,wed"
@@ -10,8 +14,7 @@ import pool from "../db/pool.js";
 
 function toSetValue(days) {
   if (!days || days.length === 0) return null;
-  // MySQL SET stored as comma-separated string
-  return days.join(",");
+  return isPostgres() ? days : days.join(",");
 }
 
 function fromSetValue(value) {
@@ -137,6 +140,19 @@ export async function hasCheckin(habitId, dateStr) {
 
 export async function createCheckin(habitId, dateStr) {
   // Unique constraint ensures idempotency
+  if (isPostgres()) {
+    await pool.query(
+      `
+      INSERT INTO habit_checkins (habit_id, checkin_date)
+      VALUES (?, ?)
+      ON CONFLICT (habit_id, checkin_date) DO UPDATE SET
+        checkin_date = EXCLUDED.checkin_date
+      `,
+      [habitId, dateStr]
+    );
+    return;
+  }
+
   await pool.query(
     `
     INSERT INTO habit_checkins (habit_id, checkin_date)

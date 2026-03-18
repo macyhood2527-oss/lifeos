@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { env } from "../../config/env";
 
 type HabitRow = RowDataPacket & {
   id: number;
@@ -98,10 +99,11 @@ export async function createHabit(userId: number, input: any) {
 
 export async function listHabits(userId: number, opts?: { includeInactive?: boolean }) {
   const includeInactive = opts?.includeInactive ?? false;
+  const activeLiteral = env.DB_PROVIDER === "postgres" ? "TRUE" : "1";
   const [rows] = await pool.query<HabitRow[]>(
     `SELECT * FROM habits
      WHERE user_id = ?
-       AND (${includeInactive ? "1=1" : "active=1"})
+       AND (${includeInactive ? "1=1" : `active=${activeLiteral}`})
      ORDER BY sort_order ASC, created_at DESC`,
     [userId]
   );
@@ -228,13 +230,22 @@ export async function deleteHabit(userId: number, habitId: number) {
 }
 
 export async function hardDeleteAllHabits(userId: number) {
-  await pool.execute(
-    `DELETE hc
-     FROM habit_checkins hc
-     INNER JOIN habits h ON h.id = hc.habit_id
-     WHERE hc.user_id = ? AND h.user_id = ?`,
-    [userId, userId]
-  );
+  if (env.DB_PROVIDER === "postgres") {
+    await pool.execute(
+      `DELETE FROM habit_checkins
+       WHERE user_id = ?
+         AND habit_id IN (SELECT id FROM habits WHERE user_id = ?)`,
+      [userId, userId]
+    );
+  } else {
+    await pool.execute(
+      `DELETE hc
+       FROM habit_checkins hc
+       INNER JOIN habits h ON h.id = hc.habit_id
+       WHERE hc.user_id = ? AND h.user_id = ?`,
+      [userId, userId]
+    );
+  }
 
   const [result] = await pool.execute<ResultSetHeader>(
     `DELETE FROM habits WHERE user_id = ?`,
@@ -269,15 +280,27 @@ export async function checkinHabit(userId: number, habitId: number, input: any) 
   if (!habit) return null;
 
   // UPSERT: create row if none, otherwise increment value
-  await pool.execute<ResultSetHeader>(
-    `
-    INSERT INTO habit_checkins (user_id, habit_id, checkin_date, value, created_at)
-    VALUES (?, ?, ?, ?, NOW(3))
-    ON DUPLICATE KEY UPDATE
-      value = value + VALUES(value)
-    `,
-    [userId, habitId, checkin_date, value]
-  );
+  if (env.DB_PROVIDER === "postgres") {
+    await pool.execute<ResultSetHeader>(
+      `
+      INSERT INTO habit_checkins (user_id, habit_id, checkin_date, value, created_at)
+      VALUES (?, ?, ?, ?, NOW(3))
+      ON CONFLICT (user_id, habit_id, checkin_date) DO UPDATE SET
+        value = habit_checkins.value + EXCLUDED.value
+      `,
+      [userId, habitId, checkin_date, value]
+    );
+  } else {
+    await pool.execute<ResultSetHeader>(
+      `
+      INSERT INTO habit_checkins (user_id, habit_id, checkin_date, value, created_at)
+      VALUES (?, ?, ?, ?, NOW(3))
+      ON DUPLICATE KEY UPDATE
+        value = value + VALUES(value)
+      `,
+      [userId, habitId, checkin_date, value]
+    );
+  }
 
   // fetch updated row
   const [rows] = await pool.query<CheckinRow[]>(

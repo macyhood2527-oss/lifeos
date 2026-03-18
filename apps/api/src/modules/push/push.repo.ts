@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool";
 import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
+import { env } from "../../config/env";
 
 export type PushSubscriptionRow = RowDataPacket & {
   id: number;
@@ -22,7 +23,24 @@ export async function upsertPushSubscription(params: {
 }) {
   const { userId, endpoint, p256dh, auth, userAgent } = params;
 
-  // Upsert by unique endpoint
+  if (env.DB_PROVIDER === "postgres") {
+    await pool.execute<ResultSetHeader>(
+      `
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, last_seen_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3), NOW(3))
+      ON CONFLICT (endpoint) DO UPDATE SET
+        user_id = EXCLUDED.user_id,
+        p256dh = EXCLUDED.p256dh,
+        auth = EXCLUDED.auth,
+        user_agent = EXCLUDED.user_agent,
+        last_seen_at = NOW(3),
+        updated_at = NOW(3)
+      `,
+      [userId, endpoint, p256dh, auth, userAgent ?? null]
+    );
+    return;
+  }
+
   await pool.execute<ResultSetHeader>(
     `
     INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, last_seen_at, created_at, updated_at)
