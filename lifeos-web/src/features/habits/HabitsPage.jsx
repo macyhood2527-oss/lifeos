@@ -33,6 +33,10 @@ function EmptyHabitsState({ title, body, chips = [] }) {
 }
 
 export default function HabitsPage() {
+  function isActiveHabit(h) {
+    return h?.active === true || Number(h?.active) === 1;
+  }
+
   const [searchParams] = useSearchParams();
   const focusedHabitId = searchParams.get("item");
   const openReminder = searchParams.get("reminder") === "1";
@@ -80,7 +84,7 @@ export default function HabitsPage() {
   const load = useCallback(() => habitsQuery.refetch(), [habitsQuery]);
 
   const activeHabits = useMemo(
-    () => (Array.isArray(habits) ? habits : []).filter((h) => Number(h.active) === 1),
+    () => (Array.isArray(habits) ? habits : []).filter((h) => isActiveHabit(h)),
     [habits]
   );
   const visibleCheckinHabits = useMemo(() => {
@@ -341,7 +345,7 @@ export default function HabitsPage() {
             {(Array.isArray(habits) ? habits : []).map((h) => {
               const isEditing = editId === h.id;
               const isBusy = busyId === h.id;
-              const isInactive = Number(h.active) === 0;
+              const isInactive = !isActiveHabit(h);
 
               return (
                 <div

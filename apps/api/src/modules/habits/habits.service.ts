@@ -7,7 +7,7 @@ type HabitRow = RowDataPacket & {
   user_id: number;
   name: string;
   description: string | null;
-  active: number;
+  active: number | boolean;
   sort_order: number;
   cadence: "daily" | "weekly";
   target_per_period: number;
@@ -81,6 +81,10 @@ function normalizeYYYYMMDD(v: any) {
 }
 
 export async function createHabit(userId: number, input: any) {
+  const activeValue = env.DB_PROVIDER === "postgres"
+    ? input.active !== false
+    : (input.active === false ? 0 : 1);
+
   const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO habits (user_id, name, description, active, sort_order, cadence, target_per_period, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3), NOW(3))`,
@@ -88,7 +92,7 @@ export async function createHabit(userId: number, input: any) {
       userId,
       input.name,
       input.description ?? null,
-      input.active === false ? 0 : 1,
+      activeValue,
       input.sort_order ?? 0,
       input.cadence ?? "daily",
       input.target_per_period ?? 1,
@@ -197,12 +201,13 @@ export async function getHabitById(userId: number, habitId: number) {
 }
 
 export async function updateHabit(userId: number, habitId: number, patch: any) {
+  const toDbBoolean = (value: boolean) => (env.DB_PROVIDER === "postgres" ? value : (value ? 1 : 0));
   const fields: string[] = [];
   const values: any[] = [];
 
   if (patch.name !== undefined) { fields.push("name=?"); values.push(patch.name); }
   if (patch.description !== undefined) { fields.push("description=?"); values.push(patch.description); }
-  if (patch.active !== undefined) { fields.push("active=?"); values.push(patch.active ? 1 : 0); }
+  if (patch.active !== undefined) { fields.push("active=?"); values.push(toDbBoolean(Boolean(patch.active))); }
   if (patch.sort_order !== undefined) { fields.push("sort_order=?"); values.push(patch.sort_order); }
   if (patch.cadence !== undefined) { fields.push("cadence=?"); values.push(patch.cadence); }
   if (patch.target_per_period !== undefined) { fields.push("target_per_period=?"); values.push(patch.target_per_period); }
@@ -223,8 +228,8 @@ export async function updateHabit(userId: number, habitId: number, patch: any) {
 export async function deleteHabit(userId: number, habitId: number) {
   // MVP: soft disable instead of delete
   await pool.execute(
-    `UPDATE habits SET active=0, updated_at=NOW(3) WHERE user_id=? AND id=?`,
-    [userId, habitId]
+    `UPDATE habits SET active=?, updated_at=NOW(3) WHERE user_id=? AND id=?`,
+    [env.DB_PROVIDER === "postgres" ? false : 0, userId, habitId]
   );
   return true;
 }
