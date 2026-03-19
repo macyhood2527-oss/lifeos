@@ -9,6 +9,8 @@ export default function TaskList({
   initialOpenId = null,
   highlightTaskId = null,
   autoOpenReminderForId = null,
+  focusTaskIds = [],
+  onToggleFocusTask = null,
 }) {
   const [busyId, setBusyId] = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -76,6 +78,11 @@ export default function TaskList({
     for (const t of list) m.set(String(t.id), t);
     return m;
   }, [list]);
+
+  const focusTaskIdSet = useMemo(
+    () => new Set((Array.isArray(focusTaskIds) ? focusTaskIds : []).map((id) => String(id))),
+    [focusTaskIds]
+  );
 
   useEffect(() => {
     if (!initialOpenId) return;
@@ -271,6 +278,8 @@ export default function TaskList({
     const isOpen = openId === tid;
     const draft = getDraft(tid);
     const isHighlighted = highlightTaskId != null && String(highlightTaskId) === tid;
+    const isFocused = focusTaskIdSet.has(tid);
+    const canPinToFocus = typeof onToggleFocusTask === "function" && !isDone;
 
     const moveClass =
       justMoved[tid] === "toDone"
@@ -312,7 +321,23 @@ export default function TaskList({
           </div>
 
           <div className="flex gap-2 shrink-0">
+            {canPinToFocus ? (
+              <button
+                type="button"
+                onClick={() => onToggleFocusTask(t.id)}
+                className={[
+                  "rounded-xl border px-2 py-1 text-[11px] active:scale-[0.98] transition",
+                  isFocused
+                    ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                    : "hover:bg-stone-50",
+                ].join(" ")}
+              >
+                {isFocused ? "Focused" : "Focus"}
+              </button>
+            ) : null}
+
             <button
+              type="button"
               onClick={() => toggleDetails(t)}
               className="rounded-xl border px-2 py-1 text-[11px] hover:bg-stone-50 active:scale-[0.98] transition"
             >
@@ -320,6 +345,7 @@ export default function TaskList({
             </button>
 
             <button
+              type="button"
               disabled={isBusy}
               onClick={() => setStatus(t.id, isDone ? "todo" : "done")}
               className="rounded-xl border px-2 py-1 text-[11px] hover:bg-stone-50 active:scale-[0.98] transition"

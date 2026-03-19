@@ -21,6 +21,7 @@ import {
   getTodayReflection,
   getReminders,
 } from "./today.api";
+import { loadFocusToday, saveFocusToday } from "./focusToday.state";
 import { Icons } from "../../config/icons";
 
 function GlassPanel({ title, subtitle, children, rightSlot, icon: Icon }) {
@@ -78,9 +79,22 @@ function pickDailyMessage(messages, seedKey) {
   return messages[idx];
 }
 
+function getHabitTarget(habit) {
+  return Number(habit?.target_per_period ?? habit?.target ?? 1) || 1;
+}
+
+function getHabitProgress(habit) {
+  if (Number.isFinite(Number(habit?.progress))) return Number(habit.progress);
+  if (habit?.thisPeriodProgress?.value != null) return Number(habit.thisPeriodProgress.value) || 0;
+  if (habit?.checked_in_today === true) return 1;
+  return 0;
+}
+
 export default function TodayPage() {
   const [reflectionOpen, setReflectionOpen] = useState(true);
   const [remindersReady, setRemindersReady] = useState(false);
+  const [focusToday, setFocusToday] = useState(() => loadFocusToday());
+  const [focusToast, setFocusToast] = useState(null);
   const [notificationPermission, setNotificationPermission] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "default"
   );
@@ -152,6 +166,12 @@ export default function TodayPage() {
     return () => clearTimeout(t);
   }, [reminderToast]);
 
+  useEffect(() => {
+    if (!focusToast) return;
+    const t = setTimeout(() => setFocusToast(null), 1800);
+    return () => clearTimeout(t);
+  }, [focusToast]);
+
   const topTasks = useMemo(() => {
     const rank = { high: 0, medium: 1, low: 2 };
     return (Array.isArray(tasks) ? [...tasks] : [])
@@ -180,23 +200,14 @@ export default function TodayPage() {
     return { total, done, left, percent };
   }, [tasks]);
 
+  const focusTaskSuggestions = useMemo(() => topTasks.filter((task) => task.status !== "done"), [topTasks]);
+
   const habitStats = useMemo(() => {
-    function getTarget(h) {
-      return Number(h?.target_per_period ?? h?.target ?? 1) || 1;
-    }
-
-    function getProgress(h) {
-      if (Number.isFinite(Number(h?.progress))) return Number(h.progress);
-      if (h?.thisPeriodProgress?.value != null) return Number(h.thisPeriodProgress.value) || 0;
-      if (h?.checked_in_today === true) return 1;
-      return 0;
-    }
-
     const list = Array.isArray(habits) ? habits : [];
     const total = list.length;
     const done = list.filter((h) => {
-      const target = getTarget(h);
-      const progress = Math.min(getProgress(h), target);
+      const target = getHabitTarget(h);
+      const progress = Math.min(getHabitProgress(h), target);
       return progress >= target;
     }).length;
     const left = Math.max(0, total - done);
@@ -262,6 +273,146 @@ export default function TodayPage() {
     const seedKey = `today-${tasks.length}-${habits.length}`;
     return pickDailyMessage(fallbackMessages, seedKey);
   }, [fallbackMessages, tasks.length, habits.length]);
+
+  const taskMap = useMemo(() => {
+    const next = new Map();
+    for (const task of Array.isArray(tasks) ? tasks : []) {
+      next.set(Number(task.id), task);
+    }
+    return next;
+  }, [tasks]);
+
+  const habitMap = useMemo(() => {
+    const next = new Map();
+    for (const habit of Array.isArray(habits) ? habits : []) {
+      next.set(Number(habit.id), habit);
+    }
+    return next;
+  }, [habits]);
+
+  const selectedFocusTasks = useMemo(
+    () => focusToday.taskIds.map((id) => taskMap.get(Number(id))).filter(Boolean),
+    [focusToday.taskIds, taskMap]
+  );
+
+  const selectedFocusHabit = useMemo(
+    () => (focusToday.habitId != null ? habitMap.get(Number(focusToday.habitId)) ?? null : null),
+    [focusToday.habitId, habitMap]
+  );
+
+  const visibleFocusTaskSuggestions = useMemo(
+    () =>
+      focusTaskSuggestions.filter(
+        (task) => !selectedFocusTasks.some((selectedTask) => Number(selectedTask.id) === Number(task.id))
+      ),
+    [focusTaskSuggestions, selectedFocusTasks]
+  );
+
+  const visibleFocusHabitSuggestions = useMemo(
+    () => habits.filter((habit) => Number(habit.id) !== Number(focusToday.habitId)),
+    [focusToday.habitId, habits]
+  );
+
+  const focusCompletion = useMemo(() => {
+    const completedTasks = focusToday.taskIds.filter((id) => {
+      const task = tasks.find((item) => Number(item.id) === Number(id));
+      return task?.status === "done";
+    }).length;
+
+    const habitTarget = selectedFocusHabit ? getHabitTarget(selectedFocusHabit) : 0;
+    const habitProgress = selectedFocusHabit ? Math.min(getHabitProgress(selectedFocusHabit), habitTarget) : 0;
+    const habitDone = Boolean(selectedFocusHabit) && habitProgress >= habitTarget;
+    const total = focusToday.taskIds.length + (selectedFocusHabit ? 1 : 0);
+    const done = completedTasks + (habitDone ? 1 : 0);
+
+    return {
+      done,
+      total,
+      completedTasks,
+      habitDone,
+      habitProgress,
+      habitTarget,
+      percent: total > 0 ? Math.round((done / total) * 100) : 0,
+    };
+  }, [focusToday.taskIds, selectedFocusHabit, tasks]);
+
+  useEffect(() => {
+    setFocusToday((current) => {
+      const nextTaskIds = current.taskIds.filter((id) => taskMap.has(Number(id)));
+      const nextHabitId =
+        current.habitId != null && habitMap.has(Number(current.habitId)) ? current.habitId : null;
+
+      if (
+        nextTaskIds.length === current.taskIds.length &&
+        nextHabitId === current.habitId
+      ) {
+        return current;
+      }
+
+      return saveFocusToday({
+        ...current,
+        taskIds: nextTaskIds,
+        habitId: nextHabitId,
+      });
+    });
+  }, [habitMap, taskMap]);
+
+  const updateFocusToday = useCallback((updater) => {
+    setFocusToday((current) => {
+      const next = typeof updater === "function" ? updater(current) : updater;
+      return saveFocusToday(next);
+    });
+  }, []);
+
+  const toggleFocusTask = useCallback(
+    (taskId) => {
+      updateFocusToday((current) => {
+        const id = Number(taskId);
+        const alreadySelected = current.taskIds.includes(id);
+        const taskIds = alreadySelected
+          ? current.taskIds.filter((value) => value !== id)
+          : [...current.taskIds, id].slice(0, 3);
+
+        return { ...current, taskIds };
+      });
+
+      const task = taskMap.get(Number(taskId));
+      if (task) {
+        const isSelected = focusToday.taskIds.includes(Number(taskId));
+        setFocusToast(isSelected ? "Removed from Focus Today." : "Added to Focus Today.");
+      }
+    },
+    [focusToday.taskIds, taskMap, updateFocusToday]
+  );
+
+  const setFocusHabit = useCallback(
+    (habitId) => {
+      const nextIsSame = Number(focusToday.habitId) === Number(habitId);
+      updateFocusToday((current) => ({
+        ...current,
+        habitId: Number(current.habitId) === Number(habitId) ? null : Number(habitId),
+      }));
+
+      setFocusToast(nextIsSame ? "Anchor habit removed." : "Anchor habit set.");
+    },
+    [focusToday.habitId, updateFocusToday]
+  );
+
+  const setFocusIntention = useCallback(
+    (intention) => {
+      updateFocusToday((current) => ({ ...current, intention }));
+    },
+    [updateFocusToday]
+  );
+
+  const clearFocusToday = useCallback(() => {
+    updateFocusToday((current) => ({
+      ...current,
+      taskIds: [],
+      habitId: null,
+      intention: "",
+    }));
+  }, [updateFocusToday]);
 
   const reminderEntityMap = useMemo(() => {
     const taskMap = new Map();
@@ -389,6 +540,14 @@ export default function TodayPage() {
         </div>
       ) : null}
 
+      {focusToast ? (
+        <div className="fixed left-1/2 top-16 z-50 -translate-x-1/2">
+          <div className="rounded-2xl border border-sky-200 bg-white/90 px-4 py-2 text-xs text-sky-900 shadow-sm backdrop-blur">
+            {focusToast}
+          </div>
+        </div>
+      ) : null}
+
       {/* 🌿 Today Summary */}
       <GlassPanel
         title="Today"
@@ -466,6 +625,241 @@ export default function TodayPage() {
                     background: "linear-gradient(90deg, #BAE6FD, #C4B5FD)",
                   }}
                 />
+              </div>
+            </div>
+          </div>
+        </div>
+      </GlassPanel>
+
+      <GlassPanel
+        title="Focus Today"
+        icon={Icons.themeFocus}
+        subtitle="Pick a few anchors so the day feels clearer, not heavier."
+        rightSlot={
+          focusToday.taskIds.length || focusToday.habitId || focusToday.intention ? (
+            <button
+              type="button"
+              onClick={clearFocusToday}
+              className="rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-xs text-stone-700 hover:bg-stone-50"
+            >
+              Reset focus
+            </button>
+          ) : null
+        }
+      >
+        <div className="grid gap-4 lg:grid-cols-[1.35fr,0.95fr]">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white/85 to-rose-50/80 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-amber-900">
+                    Today plan
+                  </div>
+                  <p className="mt-1 text-sm leading-relaxed text-stone-700">
+                    {focusCompletion.total > 0
+                      ? `${focusCompletion.done} of ${focusCompletion.total} focus anchors complete so far.`
+                      : "Choose up to 3 tasks, 1 anchor habit, and one gentle intention."}
+                  </p>
+                </div>
+                <span className="rounded-full border border-amber-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-amber-900">
+                  {focusCompletion.percent}% complete
+                </span>
+              </div>
+
+              <div className="mt-3 h-2 rounded-full border border-black/5 bg-white/80">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${focusCompletion.percent}%`,
+                    background: "linear-gradient(90deg, #FDBA74, #F9A8D4, #93C5FD)",
+                  }}
+                />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {selectedFocusTasks.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedFocusTasks.map((task) => {
+                      const done = task?.status === "done";
+                      return (
+                        <div
+                          key={task.id}
+                          className="flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-white/75 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-stone-900">{task.title}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-stone-500">
+                              <span>{task.priority || "medium"} priority</span>
+                              {done ? (
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-900">
+                                  completed
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleFocusTask(task.id)}
+                            className="shrink-0 rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11px] text-stone-700 hover:bg-stone-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-white/70 p-3 text-sm text-stone-600">
+                    No focus tasks yet. Pick the few that would make the day feel lighter.
+                  </div>
+                )}
+
+                {selectedFocusHabit ? (
+                  <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-sky-900">
+                          Anchor habit
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-stone-900">
+                          {selectedFocusHabit.name}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFocusHabit(selectedFocusHabit.id)}
+                        className="rounded-full border border-sky-200 bg-white/80 px-2.5 py-1 text-[11px] text-sky-900"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="mt-2 text-xs text-stone-600">
+                      Progress {focusCompletion.habitProgress}/{focusCompletion.habitTarget}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-white/70 p-3 text-sm text-stone-600">
+                    No anchor habit chosen yet. Pick one ritual to return to today.
+                  </div>
+                )}
+
+                <label className="block">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-600">
+                    Gentle intention
+                  </div>
+                  <input
+                    type="text"
+                    value={focusToday.intention}
+                    onChange={(event) => setFocusIntention(event.target.value)}
+                    placeholder="Example: Finish one thing before checking everything else."
+                    maxLength={120}
+                    className="w-full rounded-2xl border border-black/10 bg-white/85 px-3 py-2.5 text-sm text-stone-900 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-black/5 bg-white/70 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-stone-700">
+                    Pick focus tasks
+                  </div>
+                  <div className="mt-1 text-sm text-stone-600">
+                    Choose up to 3 from your open tasks.
+                  </div>
+                </div>
+                <span className="rounded-full border border-black/10 bg-stone-50 px-2.5 py-1 text-[11px] text-stone-700">
+                  {focusToday.taskIds.length}/3
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {visibleFocusTaskSuggestions.length === 0 ? (
+                  <div className="rounded-2xl bg-stone-100 p-3 text-sm text-stone-600">
+                    {selectedFocusTasks.length > 0
+                      ? "Your current focus tasks are already picked."
+                      : "No open tasks to choose from right now."}
+                  </div>
+                ) : (
+                  visibleFocusTaskSuggestions.map((task) => {
+                    const selected = focusToday.taskIds.includes(Number(task.id));
+                    const disabled = !selected && focusToday.taskIds.length >= 3;
+                    return (
+                      <button
+                        key={task.id}
+                        type="button"
+                        onClick={() => toggleFocusTask(task.id)}
+                        disabled={disabled}
+                        className={[
+                          "flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left transition",
+                          selected
+                            ? "border-emerald-200 bg-emerald-50/70 text-emerald-950"
+                            : "border-black/5 bg-white/80 text-stone-800 hover:bg-stone-50",
+                          disabled ? "cursor-not-allowed opacity-50" : "",
+                        ].join(" ")}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{task.title}</span>
+                          <span className="mt-1 block text-[11px] text-stone-500">
+                            {task.priority || "medium"} priority
+                          </span>
+                        </span>
+                        <span className="shrink-0 rounded-full border border-black/10 bg-white/80 px-2 py-1 text-[10px]">
+                          {selected ? "Selected" : "Pick"}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-black/5 bg-white/70 p-4">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-700">
+                Pick an anchor habit
+              </div>
+              <div className="space-y-2">
+                {habits.length === 0 ? (
+                  <div className="rounded-2xl bg-stone-100 p-3 text-sm text-stone-600">
+                    Add a habit first, then you can anchor your day around it.
+                  </div>
+                ) : visibleFocusHabitSuggestions.length === 0 && selectedFocusHabit ? (
+                  <div className="rounded-2xl bg-stone-100 p-3 text-sm text-stone-600">
+                    Your anchor habit is already set.
+                  </div>
+                ) : (
+                  visibleFocusHabitSuggestions.slice(0, 5).map((habit) => {
+                    const selected = Number(focusToday.habitId) === Number(habit.id);
+                    const target = getHabitTarget(habit);
+                    const progress = Math.min(getHabitProgress(habit), target);
+                    return (
+                      <button
+                        key={habit.id}
+                        type="button"
+                        onClick={() => setFocusHabit(habit.id)}
+                        className={[
+                          "flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 text-left transition",
+                          selected
+                            ? "border-sky-200 bg-sky-50/70 text-sky-950"
+                            : "border-black/5 bg-white/80 text-stone-800 hover:bg-stone-50",
+                        ].join(" ")}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{habit.name}</span>
+                          <span className="mt-1 block text-[11px] text-stone-500">
+                            {progress}/{target} this period
+                          </span>
+                        </span>
+                        <span className="shrink-0 rounded-full border border-black/10 bg-white/80 px-2 py-1 text-[10px]">
+                          {selected ? "Selected" : "Pick"}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
@@ -592,7 +986,13 @@ export default function TodayPage() {
           </div>
         ) : (
           <>
-            <HabitList habits={habits} onCheckedIn={reload} compact />
+            <HabitList
+              habits={habits}
+              onCheckedIn={reload}
+              compact
+              focusHabitId={focusToday.habitId}
+              onToggleFocusHabit={setFocusHabit}
+            />
             {habits.length > 4 ? (
               <div className="mt-3 text-right">
                 <a
@@ -627,7 +1027,12 @@ export default function TodayPage() {
               Nothing scheduled for today. Add something gentle.
             </div>
           ) : (
-            <TaskList tasks={topTasks} onUpdated={reload} />
+            <TaskList
+              tasks={topTasks}
+              onUpdated={reload}
+              focusTaskIds={focusToday.taskIds}
+              onToggleFocusTask={toggleFocusTask}
+            />
           )}
         </div>
 

@@ -35,6 +35,8 @@ export default function HabitList({
   highlightHabitId = null,
   autoOpenReminderForId = null,
   compact = false,
+  focusHabitId = null,
+  onToggleFocusHabit = null,
 }) {
   const [busyId, setBusyId] = useState(null);
   const cardRefs = useRef(new Map());
@@ -84,6 +86,9 @@ export default function HabitList({
     () => normalized.filter((h) => h.done),
     [normalized]
   );
+
+  const normalizedFocusHabitId =
+    focusHabitId == null ? null : String(focusHabitId);
 
   useEffect(() => {
     if (!highlightHabitId) return;
@@ -140,6 +145,8 @@ export default function HabitList({
     const buttonLabel = h.done ? "Checked" : h.started ? "Add +1" : "Check in";
     const pct = Math.round((h.progress / Math.max(1, h.target)) * 100);
     const isHighlighted = highlightHabitId != null && String(highlightHabitId) === String(h.id);
+    const isFocused = normalizedFocusHabitId === String(h.id);
+    const canPinToFocus = typeof onToggleFocusHabit === "function";
 
     return (
       <div
@@ -233,6 +240,21 @@ export default function HabitList({
         >
           {isBusy ? "Checking…" : buttonLabel}
         </button>
+
+        {canPinToFocus ? (
+          <button
+            type="button"
+            onClick={() => onToggleFocusHabit(h.id)}
+            className={[
+              "shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition",
+              isFocused
+                ? "border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100"
+                : "border-black/10 bg-white/70 text-stone-700 hover:bg-stone-50",
+            ].join(" ")}
+          >
+            {isFocused ? "Focused" : "Focus"}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -240,6 +262,8 @@ export default function HabitList({
   function renderCompactHabitRow(h) {
     const isBusy = busyId === h.id;
     const isHighlighted = highlightHabitId != null && String(highlightHabitId) === String(h.id);
+    const isFocused = normalizedFocusHabitId === String(h.id);
+    const canPinToFocus = typeof onToggleFocusHabit === "function";
     const toneClass = h.done
       ? "border-emerald-200 bg-emerald-50/70 text-emerald-900"
       : h.started
@@ -274,27 +298,44 @@ export default function HabitList({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => handleCheckin(h.id)}
-          disabled={isBusy || h.done}
-          style={
-            h.done
-              ? undefined
-              : {
-                  backgroundImage:
-                    "linear-gradient(135deg, var(--lifeos-bg-from), var(--lifeos-bg-via))",
-                }
-          }
-          className={[
-            "shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-medium shadow-sm transition active:scale-[0.98] disabled:opacity-60",
-            h.done
-              ? "cursor-default border-emerald-200 bg-white/80 text-emerald-900"
-              : "border-black/10 bg-white/70 text-stone-800 hover:bg-white/85",
-          ].join(" ")}
-        >
-          {isBusy ? "Saving..." : h.done ? "Done" : h.started ? "+1" : "Check"}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {canPinToFocus ? (
+            <button
+              type="button"
+              onClick={() => onToggleFocusHabit(h.id)}
+              className={[
+                "rounded-full border px-3 py-1.5 text-[11px] font-medium shadow-sm transition active:scale-[0.98]",
+                isFocused
+                  ? "border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100"
+                  : "border-black/10 bg-white/70 text-stone-700 hover:bg-stone-50",
+              ].join(" ")}
+            >
+              {isFocused ? "Focused" : "Focus"}
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => handleCheckin(h.id)}
+            disabled={isBusy || h.done}
+            style={
+              h.done
+                ? undefined
+                : {
+                    backgroundImage:
+                      "linear-gradient(135deg, var(--lifeos-bg-from), var(--lifeos-bg-via))",
+                  }
+            }
+            className={[
+              "rounded-full border px-3 py-1.5 text-[11px] font-medium shadow-sm transition active:scale-[0.98] disabled:opacity-60",
+              h.done
+                ? "cursor-default border-emerald-200 bg-white/80 text-emerald-900"
+                : "border-black/10 bg-white/70 text-stone-800 hover:bg-white/85",
+            ].join(" ")}
+          >
+            {isBusy ? "Saving..." : h.done ? "Done" : h.started ? "+1" : "Check"}
+          </button>
+        </div>
       </div>
     );
   }
