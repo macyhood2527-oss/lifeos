@@ -10,9 +10,9 @@ function Section({ title, children }) {
 }
 
 export default function FaqsPage() {
-  const updated = "March 2026";
+  const updated = "March 20, 2026";
   const quickLinks = [
-    { label: "Today", text: "Your calm daily view" },
+    { label: "Today", text: "Your calm daily view with Focus Today" },
     { label: "Habits", text: "Track steady routines" },
     { label: "Tasks", text: "Manage what needs doing" },
     { label: "Reflect", text: "Log mood and notes" },
@@ -57,6 +57,17 @@ export default function FaqsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="What is new in the latest update?">
+          <p>
+            The latest update adds a new Focus Today flow. You can now choose up to three focus tasks,
+            set one anchor habit, and write a short intention for the day from the Today page.
+          </p>
+          <p className="mt-2">
+            You can also pin tasks and habits directly into Focus Today from their cards, so the daily
+            plan feels quicker and more natural to build.
+          </p>
+        </Section>
+
         <Section title="What is LifeOS for?">
           <p>
             LifeOS is for calm personal organization. It brings together habits, tasks, reflections,
@@ -77,6 +88,7 @@ export default function FaqsPage() {
           </p>
           <ol className="mt-2 list-decimal pl-5 space-y-1">
             <li>A short summary of the day.</li>
+            <li>Your Focus Today plan with selected tasks, one anchor habit, and a gentle intention.</li>
             <li>Gentle reminders that are due now or later today.</li>
             <li>Your habits in a quick check-in format.</li>
             <li>Your top tasks and a quick task composer.</li>
@@ -97,6 +109,21 @@ export default function FaqsPage() {
             Tasks are for things that need to get done, whether today or later. You can add a title,
             due date, priority, and notes. The Tasks page is your fuller planning area, while Today only
             shows the top slice of what needs attention.
+          </p>
+          <p className="mt-2">
+            If you want a lighter plan for the day, you can pin a few tasks into Focus Today directly
+            from the Today task cards.
+          </p>
+        </Section>
+
+        <Section title="What is Focus Today?">
+          <p>
+            Focus Today is a lightweight daily planning layer inside the Today page. It helps you choose
+            a few meaningful tasks, one steady habit, and a short intention so the day feels clearer.
+          </p>
+          <p className="mt-2">
+            It is meant to reduce overwhelm, not create another heavy planning system. Your focus picks
+            are saved for the day and reset naturally on a new day.
           </p>
         </Section>
 

@@ -12,6 +12,8 @@ A gentle productivity journal — tasks, habits, reflections, reminders, and wee
 - Google login (OAuth 2.0)
 - Cookie-based session authentication
 - Tasks + habits + reflections
+- Focus Today planning flow
+- Pin tasks and habits into a daily focus list
 - Weekly analytics dashboard
 - Mood tracking
 - Push / reminder infrastructure
